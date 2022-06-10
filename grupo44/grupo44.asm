@@ -14,8 +14,6 @@ LINHA_TECLADO            EQU 8		      ; linha a testar (4ª linha, 1000b)
 MASCARA				     EQU 0FH	      ; para isolar os 4 bits de menor peso, ao ler as colunas do teclado
 TECLA_ESQUERDA			 EQU 11H	      ; tecla na primeira coluna do teclado (tecla 0)
 TECLA_DIREITA		     EQU 14H	      ; tecla na terceira coluna do teclado (tecla 2)
-TECLA_MENOS			     EQU 24H		  ; tecla na terceira coluna do teclado (tecla 6)
-TECLA_MAIS			     EQU 28H          ; tecla na quarta coluna do teclado (tecla 7)
 TECLA_DESCER		     EQU 81H          ; tecla na primeira coluna do teclado (tecla C)
 DISPLAYS                 EQU 0A000H	      ; endereço do periférico dos displays
 
@@ -31,14 +29,11 @@ LINHA        		     EQU 25           ; linha do boneco (a meio do ecrã))
 COLUNA					 EQU 30           ; coluna do boneco (a meio do ecrã)
 
 LINHA_POK				 EQU 1            ; linha do "meteorito"
-COLUNA_POK_1			 EQU 6            ; coluna do "meteorito"
-COLUNA_POK_2			 EQU 22
-COLUNA_POK_3			 EQU 38
-COLUNA_POK_4			 EQU 54
+COLUNA_POK				 EQU 6            ; coluna do "meteorito"
 
 MIN_COLUNA				 EQU 0		      ; número da coluna mais à esquerda que o objeto pode ocupar
 MAX_COLUNA				 EQU 63           ; número da coluna mais à direita que o objeto pode ocupar
-ATRASO			 		 EQU 07FFFH		  ; atraso para limitar a velocidade de movimento do boneco
+ATRASO			 		 EQU 29H		  ; atraso para limitar a velocidade de movimento do boneco
 
 LARGURA					 EQU 5 			  ; largura do boneco
 COR_PIXEL_VERMELHO		 EQU 0FF00H		  ; cor do pixel: vermelho em ARGB (opaco e vermelho no máximo, verde e azul a 0)
@@ -47,7 +42,7 @@ COR_PIXEL_PRETO     	 EQU 0F000H       ; cor do pixel: preto em ARGB (com opacid
 COR_PIXEL_CINZENTO  	 EQU 0F79CH       ; cor do pixel: cinzento em ARGB (com opacidade máxima)
 COR_PIXEL_BRANCO		 EQU 0FFFFH       ; cor do pixel: branco em ARGB (com opacidade máxima)
 
-VIDA    				 EQU 50H		  ; valor inicial da grandeza "vida", que aparece no display
+VIDA    				 EQU 100H		  ; valor inicial da grandeza "vida", que aparece no display
 
 ; *********************************************************************************
 ; * Dados 
@@ -58,13 +53,14 @@ VIDA    				 EQU 50H		  ; valor inicial da grandeza "vida", que aparece no displ
 SP_inicial_prog_princ:
 
 	STACK 100H
+SP_inicial_teclado:
 
+	STACK 100H
+SP_inicial_boneco:
 
-tab:
-	WORD meteoros_int
-	WORD missil_int
-	WORD energia_int
-							
+	STACK 100H
+SP_inicial_meteoro:
+
 DEF_BONECO:				; tabela que define o boneco (cor, largura, pixels)
 	WORD		LARGURA
 	WORD		COR_PIXEL_PRETO, 0, 0, 0, COR_PIXEL_PRETO
@@ -81,17 +77,15 @@ DEF_POKEBOLA: 			; tabela que define o "meteorito" (cor, largura, pixels)
 	WORD		COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO
 	WORD		0, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, 0
 
-coluna_meteoro:
-	WORD
+TECLA_CARREGADA: WORD 0
 
 ; *********************************************************************************
 ; * Código
 ; *********************************************************************************
 PLACE   0                    		    ; o código tem de começar em 0000H
 inicio:
-	MOV  SP, SP_inicial	_prog_princ	            ; inicializa SP para a palavra a seguir
+	MOV  SP, SP_inicial_prog_princ	            ; inicializa SP para a palavra a seguir
 						                ; à última da pilha
-                            
     MOV  [APAGA_AVISO], R1				; apaga o aviso de nenhum cenário selecionado (o valor de R1 não é relevante)
     MOV  [APAGA_ECRÃ], R1				; apaga todos os pixels já desenhados (o valor de R1 não é relevante)
 	MOV	 R1, 0							; cenário de fundo número 0
@@ -99,108 +93,150 @@ inicio:
 	MOV	 R7, 1							; valor a somar à coluna do boneco, para o movimentar
 	MOV  R3, VIDA                       ; coloca ao valor da vida para posterior amostra no display
 	MOV  R5, LINHA_POK                  ; coloca ao valor da linha do "meteorito"
-	MOV  R11, ATRASO					; valor que visa empatar os processos
 	CALL display                        ; mostra valor atual da vida ao utilizador
 
-	EI0
-	EI1
-	EI2
-	EI
-     
-posição_pokebola:
-    MOV  R1, LINHA_POK					; linha do boneco
-    MOV  R2, COLUNA_POK					; coluna do boneco
-	MOV	 R4, DEF_POKEBOLA				; endereço da tabela que define o boneco
+	CALL teclado
+	CALL boneco
+	CALL meteoro
 
-mostra_pokebola:
-	CALL desenha_boneco					; desenha o boneco a partir da tabela
+main:
+	YIELD
+	CALL display 
+	JMP main
+	
 
-posição_boneco:
+; **********************************************************************
+; TECLADO - Faz uma leitura às teclas do teclado e retorna o valor lido
+;				
+; **********************************************************************
+
+PROCESS SP_inicial_teclado
+teclado:
+	MOV  R2, TEC_LIN  				; endereço do periférico das linhas
+	MOV  R3, TEC_COL   				; endereço do periférico das colunas
+	MOV  R5, MASCARA   				; para isolar os 4 bits de menor peso, ao ler as colunas do teclado
+	MOV  R6, LINHA_TECLADO       	; linha a testar no teclado
+	JMP teclado_loop
+
+linha_original:
+	
+	YIELD
+	MOV  R6, LINHA_TECLADO       		; linha a testar no teclado
+
+teclado_loop:
+	MOVB [R2], R6      					; escrever no periférico de saída (linhas)
+	MOVB R0, [R3]      					; ler do periférico de entrada (colunas)
+	AND  R0, R5        					; elimina bits para além dos bits 0-3
+	CMP  R0, 0                     	 	; verifica se há tecla premida na linha atual
+	JNZ  testa_teclas               	; se há, sai da rotina
+muda_linha:
+    SHR  R6, 1                      	; muda para linha acima
+    CMP  R6, 0                      	; verifica se todas as linhas foram vistas
+    JNZ  teclado_loop               	; se não terminaram as linhas, volta a testar
+	
+	MOV  R0, 0
+	MOV  [TECLA_CARREGADA], R0
+	JMP  linha_original
+
+testa_teclas:
+	SHL  R6, 4			             	; coloca linha no nibble high
+    OR   R6, R0				         	; junta coluna (nibble low)
+	MOV  [TECLA_CARREGADA], R6
+
+	MOV  R0, TECLA_ESQUERDA
+	CMP  R6, R0
+	JZ   linha_original
+	MOV  R0, TECLA_DIREITA
+	CMP  R6, R0
+	JZ   linha_original
+
+espera_nao_tecla:
+	YIELD
+
+	MOV  R0, 0
+	MOV  [TECLA_CARREGADA], R0
+	MOV  R6, LINHA_TECLADO
+
+	MOVB [R2], R6      					; escrever no periférico de saída (linhas)
+	MOVB R0, [R3]      					; ler do periférico de entrada (colunas)
+	AND  R0, R5        					; elimina bits para além dos bits 0-3
+	CMP  R0, 0                      	; verifica se há tecla premida na linha atual
+	JNZ  espera_nao_tecla
+	JMP  linha_original
+
+
+PROCESS SP_inicial_boneco
+
+boneco:
     MOV  R1, LINHA						; linha do boneco
     MOV  R2, COLUNA						; coluna do boneco
 	MOV	 R4, DEF_BONECO					; endereço da tabela que define o boneco
-
-mostra_boneco:
+	MOV  R7, 0
+	MOV  R11, ATRASO
 	CALL desenha_boneco					; desenha o boneco a partir da tabela
 
-linha_original:
-	MOV  R6, LINHA_TECLADO       		; linha a testar no teclado
+ciclo_boneco:
+	YIELD
 
-loop:				        			; neste ciclo espera-se até uma tecla ser premida
-	CALL teclado_entrada				; leitura às teclas
-	CMP	 R0, 0                          ; verificar se há alguma tecla premida
-	JZ   linha_original		   	        ; espera, enquanto não houver tecla
-	SHL  R6, 4			                ; coloca linha no nibble high
-    OR   R6, R0				            ; junta coluna (nibble low)
-	MOV  R0, TECLA_ESQUERDA             ; valor da tecla esquerda
-	CMP	 R6, R0                         ; verificar se a tecla premida é a tecla esquerda
-	JNZ	 testa_direita                  ; verificar se a tecla premida visa um movimento do boneco para a direita
-	MOV	 R7, -1							; vai deslocar para a esquerda
-	JMP	 ve_limites                     ; testar se o boneco está no limite do ecrã
-testa_direita:
-	MOV	 R0, TECLA_DIREITA              ; valor da tecla direita
-	CMP  R6, R0                         ; verificar se a tecla premida é a tecla direita
-	JNZ	 outras_teclas					; analizar outras teclas
+	MOV R3, [TECLA_CARREGADA]
+	MOV R0, TECLA_ESQUERDA
+	CMP R3, R0
+	JZ move_esquerda
+	MOV R0, TECLA_DIREITA
+	CMP R3, R0
+	JNZ ciclo_boneco
+
+move_direita:
 	MOV	 R7, +1							; vai deslocar para a direita
-	
-ve_limites:
-	MOV	 R6, [R4]						; obtém a largura do boneco
-	CALL testa_limites					; vê se chegou aos limites do ecrã e se sim força R7 a 0
-	CMP	 R7, 0                          ; verifica se o boneco está parado
-	JZ	 linha_original					; se não, é suposto movimentar o boneco e ler o teclado de novo
+	CALL testa_limites
+	CMP  R7, 0
+	JNZ  ciclo_atraso
+	JMP  ciclo_boneco
 
-move_boneco:
-	CALL atraso                         ; empatar os processos por um intervalo de tempo significativo
-	CALL apaga_boneco					; apaga o boneco na sua posição corrente
-	
-coluna_seguinte:
-	ADD	 R2, R7							; para desenhar objeto na coluna seguinte (direita ou esquerda)
+move_esquerda:
+	MOV	 R7, -1							; vai deslocar para a esquerda
+	CALL testa_limites
+	CMP  R7, 0
+	JZ   ciclo_boneco
 
-	JMP	 mostra_boneco					; vai desenhar o boneco de novo
+ciclo_atraso:
+	YIELD
+	SUB	 R11, 1               ; decrementa o tempo de atraso
+	JNZ	 ciclo_atraso         ; se o tempo de atraso ainda termina, continua
 
-outras_teclas:
-	MOV  R0, TECLA_MENOS                ; valor da tecla menos
-	CMP  R6, R0                         ; verificar se a tecla premida é a tecla menos
-	JZ   diminui_vida                   ; se sim, diminuir vida
-	MOV  R0, TECLA_MAIS                 ; valor da tecla mais
-	CMP  R6, R0                         ; verificar se a tecla premida é a tecla mais
-	JZ   aumenta_vida                   ; se sim, aumentar vida
-	MOV  R0, TECLA_DESCER               ; valor da tecla descer
-	CMP  R6, R0                         ; verificar se a tecla premida é a tecla descer
-	JZ   desce_pok                      ; se sim, descer o "meteorito"
-	JMP  linha_original                 ; se não, é suposto ler o teclado de novo
+movimento_boneco:
+	MOV  R11, ATRASO
+	CALL apaga_boneco
+	ADD R2, R7
+	CALL desenha_boneco
+	JMP ciclo_boneco
 
-diminui_vida:
-	SUB  R3, 1                          ; diminuir o valor da vida por 1
-	CALL display                        ; alterar valor da vida mostrado no display
-	JMP  espera_nao_tecla               ; esperar que uma tecla não esteja a ser premida
+PROCESS SP_inicial_meteoro
 
-aumenta_vida:
-	ADD  R3, 1                          ; aumentar o valor da vida por 1
-	CALL display                        ; alterar valor da vida mostrado no display
-	JMP  espera_nao_tecla               ; esperar que uma tecla não esteja a ser premida
+meteoro:
+    MOV  R1, LINHA_POK					; linha do boneco
+    MOV  R2, COLUNA_POK					; coluna do boneco
+	MOV	 R4, DEF_POKEBOLA				; endereço da tabela que define o boneco
+	CALL desenha_boneco					; desenha o boneco a partir da tabela
+
+ciclo_meteoro:
+	YIELD
+	MOV  R3, [TECLA_CARREGADA]
+	MOV  R0, TECLA_DESCER
+	CMP  R0, R3
+	JZ   desce_pok
+	JMP  ciclo_meteoro
 
 desce_pok:
-	MOV  R0, R2                         ; coloca o valor da coluna do boneco noutro registo temporariamente
-	MOV  R2, COLUNA_POK                 ; atribui o valor da coluna do "meteorito", que é constante
-	MOV  R1, R5                         ; atribui o valor da linha atual do "meteorito" ao registo
-	MOV  R4, DEF_POKEBOLA               ; tabela do "meteorito"
 	CALL apaga_boneco                   ; apaga o "meteorito" na posição atual
 	ADD  R1, 1                          ; incrementa o valor da posição da linha
 	CALL desenha_boneco                 ; desenha o "meteorito" na nova posição
-	MOV  R5, R1                         ; atualiza o valor da linha do "meteorito" 
-	MOV  R2, R0                         ; devolve o valor da coluna do boneco ao registo original
-	MOV  R1, LINHA                      ; devolve o valor da linha do boneco ao registo original
-	MOV  R4, DEF_BONECO                 ; devolve a tabela do boneco ao registo original
 	MOV  R0, 0                          ; som atual
 	MOV  [REPRODUZ_SOM], R0             ; reproduz o som atual
-	JMP  espera_nao_tecla               ; esperar que uma tecla não esteja a ser premida
+	JMP  ciclo_meteoro                  ; esperar que uma tecla não esteja a ser premida
 
-espera_nao_tecla:
-	CALL teclado_entrada	            ; leitura às teclas
-	CMP  R0, 0                          ; verificar se há alguma tecla premida
-	JNZ  espera_nao_tecla               ; se ainda estiver a ser premida alguma tecla continua a esperar
-	JMP  linha_original                 ; se já não houver tecla premida, volta a ler o teclado
+
+
 
 ; **********************************************************************
 ; DESENHA_BONECO - Desenha um boneco na linha e coluna indicadas
@@ -314,20 +350,6 @@ escreve_pixel:
 	MOV  [DEFINE_PIXEL], R3	  ; altera a cor do pixel na linha e coluna já selecionadas
 	RET
 
-
-; **********************************************************************
-; ATRASO - Executa um ciclo para implementar um atraso.
-; Argumentos:   R11 - valor que define o atraso
-;
-; **********************************************************************
-atraso:
-	PUSH R11
-ciclo_atraso:
-	SUB	 R11, 1               ; decrementa o tempo de atraso
-	JNZ	 ciclo_atraso         ; se o tempo de atraso ainda termina, continua
-	POP	 R11
-	RET
-
 ; **********************************************************************
 ; TESTA_LIMITES - Testa se o boneco chegou aos limites do ecrã e nesse caso
 ;			   impede o movimento (força R7 a 0)
@@ -361,35 +383,6 @@ impede_movimento:
 sai_testa_limites:	
 	POP	 R6 
 	POP	 R5
-	RET
-
-; **********************************************************************
-; TECLADO - Faz uma leitura às teclas do teclado e retorna o valor lido
-; Argumentos:	R6 - linha a testar (em formato 1, 2, 4 ou 8)
-;				
-; Retorna: 	R0 - valor lido das colunas do teclado (0, 1, 2, 4, ou 8)	
-; **********************************************************************
-teclado_entrada:
-	PUSH R2
-	PUSH R3
-	PUSH R5
-teclado_loop:
-	MOV  R2, TEC_LIN  				; endereço do periférico das linhas
-	MOV  R3, TEC_COL   				; endereço do periférico das colunas
-	MOV  R5, MASCARA   				; para isolar os 4 bits de menor peso, ao ler as colunas do teclado
-	MOVB [R2], R6      				; escrever no periférico de saída (linhas)
-	MOVB R0, [R3]      				; ler do periférico de entrada (colunas)
-	AND  R0, R5        				; elimina bits para além dos bits 0-3
-	CMP  R0, 0                      ; verifica se há tecla premida na linha atual
-	JNZ  teclado_saida              ; se há, sai da rotina
-muda_linha:
-    SHR  R6, 1                      ; muda para linha acima
-    CMP  R6, 0                      ; verifica se todas as linhas foram vistas
-    JNZ  teclado_loop               ; se não terminaram as linhas, volta a testar
-teclado_saida:
-	POP	 R5 
-	POP	 R3
-	POP	 R2
 	RET
 
 ; **********************************************************************
