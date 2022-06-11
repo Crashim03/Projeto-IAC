@@ -29,6 +29,8 @@ APAGA_AVISO     	     EQU 6040H        ; endereço do comando para apagar o avis
 APAGA_ECRÃ	 		     EQU 6002H        ; endereço do comando para apagar todos os pixels já desenhados
 SELECIONA_CENARIO_FUNDO  EQU 6042H        ; endereço do comando para selecionar uma imagem de fundo
 REPRODUZ_SOM             EQU 605AH        ; comando que inicia a reprodução do audio específicado
+MOSTRAR_ECRA			 EQU 6006H
+ESCONDER_ECRA			 EQU 6008H
 
 LINHA        		     EQU 25           ; linha do boneco (a meio do ecrã))
 COLUNA					 EQU 30           ; coluna do boneco (a meio do ecrã)
@@ -92,7 +94,7 @@ PAUSA: WORD 0
 BTE_START:
 	WORD meteoros_interrupt
 	WORD 0
-	WORD 0
+	WORD vida_interrupt
 	WORD 0
 
 ; *********************************************************************************
@@ -105,8 +107,11 @@ inicio:
 	MOV  BTE,  BTE_START										
 
 	EI0
+	EI2
 	EI
 
+	MOV  R0, 0
+	MOV  [PAUSA], R0
     MOV  [APAGA_AVISO], R1				; apaga o aviso de nenhum cenário selecionado (o valor de R1 não é relevante)
     MOV  [APAGA_ECRÃ], R1				; apaga todos os pixels já desenhados (o valor de R1 não é relevante)
 	MOV	 R1, 1							; cenário de fundo número 1
@@ -126,8 +131,9 @@ start:
 	CALL meteoro
 	MOV	 R1, 0							; cenário de fundo número 0
     MOV  [SELECIONA_CENARIO_FUNDO], R1	; seleciona o cenário de fundo
-	MOV  R3, VIDA                       ; coloca ao valor da vida para posterior amostra no display
-	CALL converte_hex_dec
+	MOV  R3, VIDA    
+	CALL converte_hex_dec                   ; coloca ao valor da vida para posterior amostra no display
+	CALL converte_dec_hex
 	CALL display                        ; mostra valor atual da vida ao utilizador
 
 main:
@@ -144,11 +150,17 @@ pausa:
 	JZ   pausar
 	MOV  R0, 0
 	MOV  [PAUSA], R0
+	MOV  [MOSTRAR_ECRA], R0
+	MOV  [SELECIONA_CENARIO_FUNDO], R0
 	JMP  main
 
 pausar:
 	MOV  R0, 1
 	MOV  [PAUSA], R0
+	MOV  R0, 0
+	MOV  [ESCONDER_ECRA], R0
+	MOV  R0, 2
+	MOV  [SELECIONA_CENARIO_FUNDO], R0
 	JMP  main
 
 ; **********************************************************************
@@ -550,6 +562,7 @@ converte_saida:
 	POP R0
 	POP R2
 	POP R1
+	RET
 
 ; **********************************************************************
 ; CONVERTE_DEC_HEX - converte o valor da vida de decimal para hexadecimal
@@ -564,6 +577,8 @@ converte_dec_hex:
 	PUSH R0
 	PUSH R6
 	PUSH R7
+	PUSH R4
+	MOV R4, 1
 	MOV R7, 10H
 	MOV R6, 0AH
 	MOV R0, 0			; inicializar output(hexadecimal) a 0
@@ -572,18 +587,21 @@ dec_hex_loop:
 	MOV R1, R3
 	DIV R3, R7
 	MOD R1, R7
-	MUL R1, R6
+	MUL R1, R4
 	ADD R0, R1
+	MUL R4, R6
 	CMP R3, 0
 	JNZ dec_hex_loop
 
 dec_hex_saida:
 	MOV R3, R0
+	POP R4
 	POP R7
 	POP R6
 	POP R0
 	POP R2
 	POP R1
+	RET
 
 ; **********************************************************************
 ; DISPLAY - mostra o valor da grandeza "vida" ao utilizador
@@ -615,3 +633,5 @@ meteoros_interrupt:
 
 	POP R0
 	RFE
+
+	
