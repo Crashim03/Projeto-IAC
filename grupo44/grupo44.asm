@@ -12,9 +12,14 @@ TEC_LIN				     EQU 0C000H	      ; endereço das linhas do teclado
 TEC_COL				     EQU 0E000H	      ; endereço das colunas do teclado (periférico PIN)
 LINHA_TECLADO            EQU 8		      ; linha a testar (4ª linha, 1000b)
 MASCARA				     EQU 0FH	      ; para isolar os 4 bits de menor peso, ao ler as colunas do teclado
-TECLA_ESQUERDA			 EQU 11H	      ; tecla na primeira coluna do teclado (tecla 0)
-TECLA_DIREITA		     EQU 14H	      ; tecla na terceira coluna do teclado (tecla 2)
-TECLA_DESCER		     EQU 81H          ; tecla na primeira coluna do teclado (tecla C)
+
+TECLA_ESQUERDA			 EQU 11H	      ; tecla 0
+TECLA_DIREITA		     EQU 14H	      ; tecla 2
+TECLA_START			     EQU 81H          ; tecla C
+TECLA_DISPARAR 			 EQU 12H
+TECLA_PAUSAR			 EQU 82H
+TECLA_TERMINAR			 EQU 84H
+
 DISPLAYS                 EQU 0A000H	      ; endereço do periférico dos displays
 
 DEFINE_LINHA    	     EQU 600AH        ; endereço do comando para definir a linha
@@ -33,6 +38,7 @@ COLUNA_POK				 EQU 6            ; coluna do "meteorito"
 
 MIN_COLUNA				 EQU 0		      ; número da coluna mais à esquerda que o objeto pode ocupar
 MAX_COLUNA				 EQU 63           ; número da coluna mais à direita que o objeto pode ocupar
+MAX_LINHA  				 EQU 32
 ATRASO			 		 EQU 29H		  ; atraso para limitar a velocidade de movimento do boneco
 
 LARGURA					 EQU 5 			  ; largura do boneco
@@ -42,7 +48,7 @@ COR_PIXEL_PRETO     	 EQU 0F000H       ; cor do pixel: preto em ARGB (com opacid
 COR_PIXEL_CINZENTO  	 EQU 0F79CH       ; cor do pixel: cinzento em ARGB (com opacidade máxima)
 COR_PIXEL_BRANCO		 EQU 0FFFFH       ; cor do pixel: branco em ARGB (com opacidade máxima)
 
-VIDA    				 EQU 100H		  ; valor inicial da grandeza "vida", que aparece no display
+VIDA    				 EQU 0CCH		  ; valor inicial da grandeza "vida", que aparece no display
 
 ; *********************************************************************************
 ; * Dados 
@@ -79,31 +85,71 @@ DEF_POKEBOLA: 			; tabela que define o "meteorito" (cor, largura, pixels)
 
 TECLA_CARREGADA: WORD 0
 
+MOV_DOWN: WORD 0
+
+PAUSA: WORD 0
+
+BTE_START:
+	WORD meteoros_interrupt
+	WORD 0
+	WORD 0
+	WORD 0
+
 ; *********************************************************************************
 ; * Código
 ; *********************************************************************************
 PLACE   0                    		    ; o código tem de começar em 0000H
 inicio:
-	MOV  SP, SP_inicial_prog_princ	            ; inicializa SP para a palavra a seguir
+	MOV  SP, SP_inicial_prog_princ	    ; inicializa SP para a palavra a seguir
 						                ; à última da pilha
+	MOV  BTE,  BTE_START										
+
+	EI0
+	EI
+
     MOV  [APAGA_AVISO], R1				; apaga o aviso de nenhum cenário selecionado (o valor de R1 não é relevante)
     MOV  [APAGA_ECRÃ], R1				; apaga todos os pixels já desenhados (o valor de R1 não é relevante)
-	MOV	 R1, 0							; cenário de fundo número 0
+	MOV	 R1, 1							; cenário de fundo número 1
     MOV  [SELECIONA_CENARIO_FUNDO], R1	; seleciona o cenário de fundo
-	MOV	 R7, 1							; valor a somar à coluna do boneco, para o movimentar
-	MOV  R3, VIDA                       ; coloca ao valor da vida para posterior amostra no display
-	MOV  R5, LINHA_POK                  ; coloca ao valor da linha do "meteorito"
-	CALL display                        ; mostra valor atual da vida ao utilizador
 
 	CALL teclado
+
+menu:
+	YIELD
+	MOV  R0, TECLA_START
+	MOV  R1, [TECLA_CARREGADA]
+	CMP  R0, R1
+	JNZ  menu
+
+start:
 	CALL boneco
 	CALL meteoro
+	MOV	 R1, 0							; cenário de fundo número 0
+    MOV  [SELECIONA_CENARIO_FUNDO], R1	; seleciona o cenário de fundo
+	MOV  R3, VIDA                       ; coloca ao valor da vida para posterior amostra no display
+	CALL converte_hex_dec
+	CALL display                        ; mostra valor atual da vida ao utilizador
 
 main:
 	YIELD
-	CALL display 
-	JMP main
-	
+	MOV  R1, [TECLA_CARREGADA]
+	MOV  R0, TECLA_PAUSAR
+	CMP  R0, R1
+	JZ   pausa
+	JMP  main
+
+pausa:
+	MOV  R0, [PAUSA]
+	CMP  R0, 0
+	JZ   pausar
+	MOV  R0, 0
+	MOV  [PAUSA], R0
+	JMP  main
+
+pausar:
+	MOV  R0, 1
+	MOV  [PAUSA], R0
+	JMP  main
 
 ; **********************************************************************
 ; TECLADO - Faz uma leitura às teclas do teclado e retorna o valor lido
@@ -171,6 +217,7 @@ boneco:
     MOV  R1, LINHA						; linha do boneco
     MOV  R2, COLUNA						; coluna do boneco
 	MOV	 R4, DEF_BONECO					; endereço da tabela que define o boneco
+	MOV	 R8, [R4]
 	MOV  R7, 0
 	MOV  R11, ATRASO
 	CALL desenha_boneco					; desenha o boneco a partir da tabela
@@ -178,12 +225,16 @@ boneco:
 ciclo_boneco:
 	YIELD
 
-	MOV R3, [TECLA_CARREGADA]
-	MOV R0, TECLA_ESQUERDA
-	CMP R3, R0
-	JZ move_esquerda
-	MOV R0, TECLA_DIREITA
-	CMP R3, R0
+	MOV  R0, [PAUSA]
+	CMP  R0, 1
+	JZ   ciclo_boneco
+
+	MOV  R3, [TECLA_CARREGADA]
+	MOV  R0, TECLA_ESQUERDA
+	CMP  R3, R0
+	JZ   move_esquerda
+	MOV  R0, TECLA_DIREITA
+	CMP  R3, R0
 	JNZ ciclo_boneco
 
 move_direita:
@@ -200,7 +251,12 @@ move_esquerda:
 	JZ   ciclo_boneco
 
 ciclo_atraso:
-	YIELD
+	YIELD 
+
+	MOV  R0, [PAUSA]
+	CMP  R0, 1
+	JZ   ciclo_atraso
+
 	SUB	 R11, 1               ; decrementa o tempo de atraso
 	JNZ	 ciclo_atraso         ; se o tempo de atraso ainda termina, continua
 
@@ -217,26 +273,45 @@ meteoro:
     MOV  R1, LINHA_POK					; linha do boneco
     MOV  R2, COLUNA_POK					; coluna do boneco
 	MOV	 R4, DEF_POKEBOLA				; endereço da tabela que define o boneco
+	MOV	 R8, [R4]
 	CALL desenha_boneco					; desenha o boneco a partir da tabela
 
 ciclo_meteoro:
 	YIELD
-	MOV  R3, [TECLA_CARREGADA]
-	MOV  R0, TECLA_DESCER
-	CMP  R0, R3
-	JZ   desce_pok
-	JMP  ciclo_meteoro
+
+	MOV  R0, [PAUSA]
+	CMP  R0, 1
+	JZ   ciclo_meteoro
+
+	MOV  R0, [MOV_DOWN]
+	CMP  R0, 0
+	JZ   ciclo_meteoro
+	MOV  R0, MAX_LINHA
+	SUB  R0, R8
+	CMP  R1, R0
+	JZ   acaba_meteoro
 
 desce_pok:
 	CALL apaga_boneco                   ; apaga o "meteorito" na posição atual
 	ADD  R1, 1                          ; incrementa o valor da posição da linha
 	CALL desenha_boneco                 ; desenha o "meteorito" na nova posição
-	MOV  R0, 0                          ; som atual
-	MOV  [REPRODUZ_SOM], R0             ; reproduz o som atual
+	MOV  R0, 0                         
+	MOV  [MOV_DOWN], R0
 	JMP  ciclo_meteoro                  ; esperar que uma tecla não esteja a ser premida
 
-
-
+acaba_meteoro:
+	CALL apaga_boneco                   ; apaga o "meteorito" na posição atual
+	SUB  R8, 1
+	JZ   sair_meteoro
+	ADD  R1, 1                          ; incrementa o valor da posição da linha
+	CALL desenha_boneco                 ; desenha o "meteorito" na nova posição
+	MOV  R0, 0                         
+	MOV  [MOV_DOWN], R0
+	JMP  ciclo_meteoro
+	
+sair_meteoro:
+	YIELD
+	JMP  sair_meteoro
 
 ; **********************************************************************
 ; DESENHA_BONECO - Desenha um boneco na linha e coluna indicadas
@@ -248,7 +323,7 @@ desce_pok:
 ;               R4 - tabela que define o boneco
 ;				R5 - número de colunas
 ;				R6 - largura do boneco
-;				R7 - numero de linhas
+;				R8 - numero de linhas
 ;
 ; **********************************************************************
 desenha_boneco:
@@ -263,7 +338,7 @@ desenha_boneco:
 	MOV  R0, R2             ; coloca valor da coluna num registo temporário
 	MOV	 R6, [R4]			; obtém a largura do boneco
 	MOV  R5, R6             ; número de colunas a tratar
-	MOV  R7, R6             ; número de linhas a tratar
+	MOV  R7, R8                 ; número de linhas a tratar
 	ADD	 R4, 2				; endereço da cor do 1º pixel (2 porque a largura é uma word)
 desenha_pixels:       		; desenha os pixels do boneco a partir da tabela
 	MOV	 R3, [R4]			; obtém a cor do próximo pixel do boneco
@@ -312,7 +387,7 @@ apaga_boneco:
 	MOV  R0, R2             ; posição inicial da primeira coluna do boneco
 	MOV	 R6, [R4]			; obtém a largura do boneco
 	MOV  R5, R6             ; número de colunas a tratar
-	MOV  R7, R6             ; número de linhas a tratar
+	MOV  R7, R8             ; número de linhas a tratar
 	ADD	 R4, 2				; endereço da cor do 1º pixel (2 porque a largura é uma word)
 apaga_pixels:       		; desenha os pixels do boneco a partir da tabela
 	MOV	 R3, 0				; cor para apagar o próximo pixel do boneco
@@ -363,6 +438,7 @@ escreve_pixel:
 testa_limites:
 	PUSH R5
 	PUSH R6
+	MOV  R6, [R4]
 testa_limite_esquerdo:				; vê se o boneco chegou ao limite esquerdo
 	MOV	 R5, MIN_COLUNA             ; número da coluna mais à esquerda que o objeto pode ocupar
 	CMP	 R2, R5                     ; verifica se o boneco está no limite esquerdo
@@ -386,6 +462,130 @@ sai_testa_limites:
 	RET
 
 ; **********************************************************************
+; CONVERTE_HEX_DEC - converte o valor da vida de hexadecimal para decimal
+
+; Argumentos:   R3 - vida atual
+;
+; **********************************************************************
+converte_hex_dec:
+	PUSH R1
+	PUSH R2
+	PUSH R0
+	PUSH R4
+	PUSH R5
+	PUSH R6
+	PUSH R7
+	MOV R6, 0						; inicializar a 0 o valor da vida em decimal
+	MOV R5, 10H						; valor da divisão entre duas casas hexadecimais seguidas
+	MOV R4, 0AH						; valor da divisão entre duas casas decimais seguidas
+	MOV R2, 1						; inicializar valor pelo qual vamos multiplicar computação duma certa casa hexadecimal (16^(nºcasa hexadecimal em questão))
+	MOV R7, 16H
+	JMP converte_loop
+
+letra_detetada:
+	MOV R7, 1
+	JMP retirar_letras_loop_2
+
+converte_loop:
+	MOV R0, R3
+
+	MOD R0, R5						; último digito do input
+	DIV R3, R5						; resto do input
+
+	MOV R1, R0						
+	MOD R1, R4						; ultimo digito do [ultimo digito do input] em decimal
+	DIV R0, R4
+	MUL R0, R5
+	
+	MUL R0, R2						; multiplicar computação pelo valor em decimal
+	MUL R1, R2
+
+	ADD R6, R1
+	ADD R6, R0
+	
+	MUL R2, R7
+	CMP R3, 0
+	JNZ converte_loop
+
+
+retirar_letras:
+	MOV R3, R6
+	MOV R6, 0
+	MOV R2, 1
+	MOV R7, 0						; booleano para verificar se ainda foram detetadas letras
+
+retirar_letras_loop:
+	MOV R0, R3
+
+	MOD R0, R5						; último digito do input
+	DIV R3, R5						; resto do input
+
+	MOV R1, R0						
+	MOD R1, R4						; ultimo digito do [ultimo digito do input] em decimal
+	DIV R0, R4
+	MUL R0, R5
+	CMP R0, 0
+	JNZ letra_detetada				;se letra detetada, alterar booleano
+
+retirar_letras_loop_2:
+	MUL R0, R2						; multiplicar computação pelo valor em decimal
+	MUL R1, R2
+
+	ADD R6, R1
+	ADD R6, R0
+	
+	MUL R2, R5
+	CMP R3, 0
+	JNZ retirar_letras_loop
+	
+
+converte_saida:
+	MOV R3, R6
+	CMP R7, 0
+	JNZ retirar_letras
+	POP R7
+	POP R6
+	POP R5
+	POP R4
+	POP R0
+	POP R2
+	POP R1
+
+; **********************************************************************
+; CONVERTE_DEC_HEX - converte o valor da vida de decimal para hexadecimal
+
+; Argumentos:   R3 - vida atual
+;
+; **********************************************************************
+
+converte_dec_hex:
+	PUSH R1
+	PUSH R2
+	PUSH R0
+	PUSH R6
+	PUSH R7
+	MOV R7, 10H
+	MOV R6, 0AH
+	MOV R0, 0			; inicializar output(hexadecimal) a 0
+
+dec_hex_loop:
+	MOV R1, R3
+	DIV R3, R7
+	MOD R1, R7
+	MUL R1, R6
+	ADD R0, R1
+	CMP R3, 0
+	JNZ dec_hex_loop
+
+dec_hex_saida:
+	MOV R3, R0
+	POP R7
+	POP R6
+	POP R0
+	POP R2
+	POP R1
+
+; **********************************************************************
 ; DISPLAY - mostra o valor da grandeza "vida" ao utilizador
 
 ; Argumentos:   R3 - vida atual
@@ -403,3 +603,15 @@ display:
 	POP	 R2
 	POP  R1
 	RET
+
+
+; Interrupts
+
+meteoros_interrupt:
+	PUSH R0
+
+	MOV R0, 1
+	MOV [MOV_DOWN], R0
+
+	POP R0
+	RFE
