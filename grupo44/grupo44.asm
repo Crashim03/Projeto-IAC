@@ -31,6 +31,7 @@ SELECIONA_CENARIO_FUNDO  EQU 6042H        ; endereço do comando para selecionar
 REPRODUZ_SOM             EQU 605AH        ; comando que inicia a reprodução do audio específicado
 MOSTRAR_ECRA			 EQU 6006H
 ESCONDER_ECRA			 EQU 6008H
+SELECIONA_ECRA			 EQU 6004H
 
 LINHA        		     EQU 25           ; linha do boneco (a meio do ecrã))
 COLUNA					 EQU 30           ; coluna do boneco (a meio do ecrã)
@@ -44,13 +45,16 @@ MAX_LINHA  				 EQU 32
 ATRASO			 		 EQU 29H		  ; atraso para limitar a velocidade de movimento do boneco
 
 LARGURA					 EQU 5 			  ; largura do boneco
+LARGURA_MEDIA			 EQU 3			  ; largura dos meteoros de tamanho médio
+LARGURA_PEQUENA			 EQU 2            ; largura dos meteoros de tamanho pequeno
 COR_PIXEL_VERMELHO		 EQU 0FF00H		  ; cor do pixel: vermelho em ARGB (opaco e vermelho no máximo, verde e azul a 0)
 COR_PIXEL_AMARELO   	 EQU 0FFD3H       ; cor do pixel: amarelo em ARGB (com opacidade máxima)
 COR_PIXEL_PRETO     	 EQU 0F000H       ; cor do pixel: preto em ARGB (com opacidade máxima)
 COR_PIXEL_CINZENTO  	 EQU 0F79CH       ; cor do pixel: cinzento em ARGB (com opacidade máxima)
 COR_PIXEL_BRANCO		 EQU 0FFFFH       ; cor do pixel: branco em ARGB (com opacidade máxima)
+COR_PIXEL_LARANJA        EQU 0F4ABH       ; cor do pixel: laranja em ARGB (com opacidade máxima)
 
-VIDA    				 EQU 0CCH		  ; valor inicial da grandeza "vida", que aparece no display
+VIDA_MAX    			 EQU 064H		  ; valor inicial da grandeza "vida", que aparece no display
 
 ; *********************************************************************************
 ; * Dados 
@@ -85,11 +89,47 @@ DEF_POKEBOLA: 			; tabela que define o "meteorito" (cor, largura, pixels)
 	WORD		COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO
 	WORD		0, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, 0
 
+DEF_POKEBOLA_MEDIA:
+	WORD	   LARGURA_MEDIA
+	WORD 	   COR_PIXEL_VERMELHO, COR_PIXEL_VERMELHO, COR_PIXEL_VERMELHO
+	WORD	   COR_PIXEL_PRETO, COR_PIXEL_CINZENTO, COR_PIXEL_PRETO
+	WORD	   COR_PIXEL_BRANCO, COR_PIXEL_BRANCO, COR_PIXEL_BRANCO
+
+DEF_POKEBOLA_PEQUENA:
+	WORD	   LARGURA_PEQUENA
+	WORD	   COR_PIXEL_VERMELHO, COR_PIXEL_VERMELHO
+	WORD	   COR_PIXEL_BRANCO, COR_PIXEL_BRANCO
+
+DEF_PATO:
+    WORD	   LARGURA
+	WORD	   0, COR_PIXEL_AMARELO, COR_PIXEL_AMARELO, COR_PIXEL_AMARELO, 0
+	WORD       0, COR_PIXEL_AMARELO, COR_PIXEL_PRETO, COR_PIXEL_AMARELO, 0
+	WORD	   0, COR_PIXEL_AMARELO, COR_PIXEL_AMARELO, COR_PIXEL_LARANJA, COR_PIXEL_LARANJA
+	WORD	   COR_PIXEL_AMARELO, COR_PIXEL_AMARELO, COR_PIXEL_AMARELO, COR_PIXEL_AMARELO, 0
+	WORD       0, COR_PIXEL_AMARELO, 0, COR_PIXEL_AMARELO, 0
+
+DEF_PATO_MEDIO:
+	WORD       LARGURA_MEDIA
+	WORD       COR_PIXEL_AMARELO, COR_PIXEL_AMARELO, 0
+	WORD       COR_PIXEL_AMARELO, COR_PIXEL_LARANJA, COR_PIXEL_LARANJA
+	WORD       COR_PIXEL_AMARELO, COR_PIXEL_AMARELO, 0
+
+DEF_PATO_PEQUENO:
+	WORD       LARGURA_PEQUENA
+	WORD       COR_PIXEL_AMARELO, COR_PIXEL_AMARELO
+	WORD       COR_PIXEL_AMARELO, COR_PIXEL_LARANJA
+
+DEF_METEOROS:
+	WORD       DEF_PATO, DEF_PATO_MEDIO, DEF_PATO_PEQUENO
+	WORD       DEF_POKEBOLA, DEF_POKEBOLA_MEDIA, DEF_POKEBOLA_PEQUENA
+
 TECLA_CARREGADA: WORD 0
 
 MOV_DOWN: WORD 0
 
-PAUSA: WORD 0
+PAUSA: WORD 1
+
+DESCE_VIDA: WORD 0
 
 BTE_START:
 	WORD meteoros_interrupt
@@ -110,7 +150,10 @@ inicio:
 	EI2
 	EI
 
-	MOV  R0, 0
+	MOV  R3, 0
+	CALL display
+
+	MOV  R0, 1
 	MOV  [PAUSA], R0
     MOV  [APAGA_AVISO], R1				; apaga o aviso de nenhum cenário selecionado (o valor de R1 não é relevante)
     MOV  [APAGA_ECRÃ], R1				; apaga todos os pixels já desenhados (o valor de R1 não é relevante)
@@ -129,11 +172,18 @@ menu:
 start:
 	CALL boneco
 	CALL meteoro
-	MOV	 R1, 0							; cenário de fundo número 0
+	
+	MOV  R0, 0
+	MOV  [PAUSA], R0
+	
+	MOV  [MOSTRAR_ECRA], R0
+	MOV  R0, 1
+	MOV  [MOSTRAR_ECRA], R0
+	MOV	 R1, 0		
+	
     MOV  [SELECIONA_CENARIO_FUNDO], R1	; seleciona o cenário de fundo
-	MOV  R3, VIDA    
-	CALL converte_hex_dec                   ; coloca ao valor da vida para posterior amostra no display
-	CALL converte_dec_hex
+	
+	MOV  R3, VIDA_MAX
 	CALL display                        ; mostra valor atual da vida ao utilizador
 
 main:
@@ -142,6 +192,25 @@ main:
 	MOV  R0, TECLA_PAUSAR
 	CMP  R0, R1
 	JZ   pausa
+
+	MOV  R0, [PAUSA]
+	MOV  R1, 1
+	CMP  R0, R1
+	JZ   main
+
+	MOV  R0, [DESCE_VIDA]
+	MOV  R1, 1
+	CMP  R1, R0
+	JZ   desce_vida
+	
+	JMP  main
+
+desce_vida:
+	SUB  R3, 5
+	JZ   game_over
+	CALL display
+	MOV  R0, 0
+	MOV  [DESCE_VIDA], R0
 	JMP  main
 
 pausa:
@@ -151,17 +220,32 @@ pausa:
 	MOV  R0, 0
 	MOV  [PAUSA], R0
 	MOV  [MOSTRAR_ECRA], R0
+	MOV  R0, 1
+	MOV  [MOSTRAR_ECRA], R0
+	MOV  R0, 0
 	MOV  [SELECIONA_CENARIO_FUNDO], R0
 	JMP  main
 
 pausar:
 	MOV  R0, 1
 	MOV  [PAUSA], R0
-	MOV  R0, 0
-	MOV  [ESCONDER_ECRA], R0
 	MOV  R0, 2
 	MOV  [SELECIONA_CENARIO_FUNDO], R0
+	MOV  R0, 0
+	MOV  [ESCONDER_ECRA], R0
+	MOV  R0, 1
+	MOV  [ESCONDER_ECRA], R0
 	JMP  main
+
+game_over:
+	CALL display
+	MOV  R0, 0
+	MOV  [SELECIONA_CENARIO_FUNDO], R0
+	MOV  R0, 0
+	MOV  [ESCONDER_ECRA], R0
+	MOV  R0, 1
+	MOV  [ESCONDER_ECRA], R0
+	JMP game_over
 
 ; **********************************************************************
 ; TECLADO - Faz uma leitura às teclas do teclado e retorna o valor lido
@@ -236,6 +320,9 @@ boneco:
 
 ciclo_boneco:
 	YIELD
+	
+	MOV  R0, 0
+	MOV  [SELECIONA_ECRA], R0
 
 	MOV  R0, [PAUSA]
 	CMP  R0, 1
@@ -265,6 +352,9 @@ move_esquerda:
 ciclo_atraso:
 	YIELD 
 
+	MOV  R0, 0
+	MOV  [SELECIONA_ECRA], R0
+
 	MOV  R0, [PAUSA]
 	CMP  R0, 1
 	JZ   ciclo_atraso
@@ -284,13 +374,18 @@ PROCESS SP_inicial_meteoro
 meteoro:
     MOV  R1, LINHA_POK					; linha do boneco
     MOV  R2, COLUNA_POK					; coluna do boneco
-	MOV	 R4, DEF_POKEBOLA				; endereço da tabela que define o boneco
+	MOV	 R4, [DEF_METEOROS]				; endereço da tabela que define o boneco
 	MOV	 R8, [R4]
+	MOV  R0, 1
+	MOV  [SELECIONA_ECRA], R0
 	CALL desenha_boneco					; desenha o boneco a partir da tabela
 
 ciclo_meteoro:
 	YIELD
 
+	MOV  R0, 1
+	MOV  [SELECIONA_ECRA], R0
+	
 	MOV  R0, [PAUSA]
 	CMP  R0, 1
 	JZ   ciclo_meteoro
@@ -304,6 +399,7 @@ ciclo_meteoro:
 	JZ   acaba_meteoro
 
 desce_pok:
+	
 	CALL apaga_boneco                   ; apaga o "meteorito" na posição atual
 	ADD  R1, 1                          ; incrementa o valor da posição da linha
 	CALL desenha_boneco                 ; desenha o "meteorito" na nova posição
@@ -487,117 +583,86 @@ converte_hex_dec:
 	PUSH R5
 	PUSH R6
 	PUSH R7
-	MOV R6, 0						; inicializar a 0 o valor da vida em decimal
+	MOV R6, 0						; inicializar a 0 o valor em decimal - output
 	MOV R5, 10H						; valor da divisão entre duas casas hexadecimais seguidas
 	MOV R4, 0AH						; valor da divisão entre duas casas decimais seguidas
-	MOV R2, 1						; inicializar valor pelo qual vamos multiplicar computação duma certa casa hexadecimal (16^(nºcasa hexadecimal em questão))
-	MOV R7, 16H
+	MOV R2, 1						; inicializar valor pelo qual a computação duma certa casa hexadecimal
+									; será multiplicada (16H^[nºcasa hexadecimal em questão])
+									
+	MOV R7, 16H						; razão da progressão geométrica ainda agora descrita
 	JMP converte_loop
 
 letra_detetada:
-	MOV R7, 1
+	MOV R7, 1						; se a letra for detetada, alterar o devido booleano para 1(True)
 	JMP retirar_letras_loop_2
 
 converte_loop:
-	MOV R0, R3
+	MOV R0, R3						; adicionar mais um registo com o valor do input
+									; para computar em separado:
+	MOD R0, R5						; o último dígito do input
+	DIV R3, R5						; os restantes dígitos do input
 
-	MOD R0, R5						; último digito do input
-	DIV R3, R5						; resto do input
-
-	MOV R1, R0						
+	MOV R1, R0						; adicionar mais um registo com o valor do último dígito do input
 	MOD R1, R4						; ultimo digito do [ultimo digito do input] em decimal
-	DIV R0, R4
+	DIV R0, R4						; primeiro dígito do [último digíto do input] em decimal
+									; Ex.: último dígito = C,
+									; logo último digito do [ultimo digito do input] em decimal = 12%10 = 2
+	
 	MUL R0, R5
 	
-	MUL R0, R2						; multiplicar computação pelo valor em decimal
+	MUL R0, R2						; multiplicar computação pelo valor de uma unidade na casa hexadecimal em questão
 	MUL R1, R2
 
-	ADD R6, R1
+	ADD R6, R1						; adicionar as duas computações parciais ao output
 	ADD R6, R0
 	
-	MUL R2, R7
-	CMP R3, 0
-	JNZ converte_loop
+	MUL R2, R7						; atualizar valor pelo qual a próxima casa hexadecimal deve ser multiplicada
+	CMP R3, 0						; já não há casas hexadecimais a serem computadas?
+	JNZ converte_loop				; se não, continuar loop
 
 
-retirar_letras:
-	MOV R3, R6
-	MOV R6, 0
-	MOV R2, 1
+retirar_letras:						; a computação anterior deixa algumas letras no output por retirar (onde por exemplo "1C" = 10 + 12 = 22)
+	MOV R3, R6						; colocar output anterior no R3 como no início da rotina
+	MOV R6, 0						; inicializar a 0 o novo output
+	MOV R2, 1						; inicializar valor pelo qual a computação duma certa casa hexadecimal
 	MOV R7, 0						; booleano para verificar se ainda foram detetadas letras
 
 retirar_letras_loop:
-	MOV R0, R3
+	MOV R0, R3						; adicionar mais um registo com o valor do input
+									; para computar em separado:
+	MOD R0, R5						; o último digito do input
+	DIV R3, R5						; os restantes dígitos do input
 
-	MOD R0, R5						; último digito do input
-	DIV R3, R5						; resto do input
-
-	MOV R1, R0						
+	MOV R1, R0						; adicionar mais um registo com o valor do último dígito do input
 	MOD R1, R4						; ultimo digito do [ultimo digito do input] em decimal
-	DIV R0, R4
+	DIV R0, R4						; primeiro dígito do [último digíto do input] em decimal
+									; Ex.: último dígito = C,
+									; logo último digito do [ultimo digito do input] em decimal = 12%10 = 2
 	MUL R0, R5
-	CMP R0, 0
-	JNZ letra_detetada				;se letra detetada, alterar booleano
+
+	CMP R0, 0						; um dígito hex em dec, só tem primeiro dígito == 1, se for letra. Ex.: CH = 12, enquanto que 9H = 09 
+	JNZ letra_detetada				; se letra detetada, alterar booleano
 
 retirar_letras_loop_2:
-	MUL R0, R2						; multiplicar computação pelo valor em decimal
+	MUL R0, R2						; multiplicar computação pelo valor de uma unidade na casa hexadecimal em questão, em decimal
 	MUL R1, R2
 
-	ADD R6, R1
+	ADD R6, R1						; adicionar as duas computações parciais ao output
 	ADD R6, R0
 	
 	MUL R2, R5
-	CMP R3, 0
-	JNZ retirar_letras_loop
+	CMP R3, 0						; já não há casas hexadecimais a serem computadas?
+	JNZ retirar_letras_loop			; se não, continuar loop
 	
 
 converte_saida:
-	MOV R3, R6
-	CMP R7, 0
-	JNZ retirar_letras
+	MOV R3, R6						; colocar valor do output no registo certo
+	CMP R7, 0						; houve alguma letra retirada ao output nesta iteração do retirar_letras?
+	JNZ retirar_letras				; se sim, reiniciar loop
 	POP R7
 	POP R6
 	POP R5
 	POP R4
-	POP R0
-	POP R2
-	POP R1
-	RET
-
-; **********************************************************************
-; CONVERTE_DEC_HEX - converte o valor da vida de decimal para hexadecimal
-
-; Argumentos:   R3 - vida atual
-;
-; **********************************************************************
-
-converte_dec_hex:
-	PUSH R1
-	PUSH R2
-	PUSH R0
-	PUSH R6
-	PUSH R7
-	PUSH R4
-	MOV R4, 1
-	MOV R7, 10H
-	MOV R6, 0AH
-	MOV R0, 0			; inicializar output(hexadecimal) a 0
-
-dec_hex_loop:
-	MOV R1, R3
-	DIV R3, R7
-	MOD R1, R7
-	MUL R1, R4
-	ADD R0, R1
-	MUL R4, R6
-	CMP R3, 0
-	JNZ dec_hex_loop
-
-dec_hex_saida:
-	MOV R3, R0
-	POP R4
-	POP R7
-	POP R6
 	POP R0
 	POP R2
 	POP R1
@@ -610,16 +675,21 @@ dec_hex_saida:
 ;
 ; **********************************************************************
 display:
+	PUSH R0 
 	PUSH R1
 	PUSH R2
 	PUSH R4
 	MOV  R1, TEC_LIN   				; endereço do periférico das linhas
     MOV  R2, TEC_COL   				; endereço do periférico das colunas
     MOV  R4, DISPLAYS  				; endereço do periférico dos displays
+	MOV  R0, R3
+	CALL converte_hex_dec
 	MOV  [R4], R3       			; escreve a vida atual nos displays
+	MOV  R3, R0
 	POP	 R4
 	POP	 R2
 	POP  R1
+	POP  R0
 	RET
 
 
@@ -628,10 +698,17 @@ display:
 meteoros_interrupt:
 	PUSH R0
 
-	MOV R0, 1
-	MOV [MOV_DOWN], R0
+	MOV  R0, 1
+	MOV  [MOV_DOWN], R0
 
-	POP R0
+	POP  R0
 	RFE
 
+vida_interrupt:
+	PUSH R0
+
+	MOV  R0, 1
+	MOV  [DESCE_VIDA], R0
 	
+	POP R0
+	RFE
