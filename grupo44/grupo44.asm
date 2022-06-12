@@ -55,6 +55,7 @@ COR_PIXEL_BRANCO		 EQU 0FFFFH       ; cor do pixel: branco em ARGB (com opacidad
 COR_PIXEL_LARANJA        EQU 0F4ABH       ; cor do pixel: laranja em ARGB (com opacidade máxima)
 
 VIDA_MAX    			 EQU 064H		  ; valor inicial da grandeza "vida", que aparece no display
+NUMERO_METEORITOS_TAM    EQU 5
 
 ; *********************************************************************************
 ; * Dados 
@@ -72,6 +73,15 @@ SP_inicial_boneco:
 
 	STACK 100H
 SP_inicial_meteoro:
+
+DEF_QUADRADO_PEQUENO:
+	WORD		1
+	WORD		COR_PIXEL_PRETO
+
+DEF_QUADRADO:
+	WORD		2
+	WORD		COR_PIXEL_PRETO, COR_PIXEL_PRETO
+	WORD		COR_PIXEL_PRETO, COR_PIXEL_PRETO
 
 DEF_BONECO:				; tabela que define o boneco (cor, largura, pixels)
 	WORD		LARGURA
@@ -120,8 +130,15 @@ DEF_PATO_PEQUENO:
 	WORD       COR_PIXEL_AMARELO, COR_PIXEL_LARANJA
 
 DEF_METEOROS:
-	WORD       DEF_PATO, DEF_PATO_MEDIO, DEF_PATO_PEQUENO
-	WORD       DEF_POKEBOLA, DEF_POKEBOLA_MEDIA, DEF_POKEBOLA_PEQUENA
+	WORD       DEF_QUADRADO_PEQUENO, DEF_QUADRADO,DEF_PATO_PEQUENO, DEF_PATO_MEDIO, DEF_PATO
+	WORD       DEF_QUADRADO_PEQUENO, DEF_QUADRADO, DEF_POKEBOLA_PEQUENA, DEF_POKEBOLA_MEDIA, DEF_POKEBOLA
+
+LINHAS:
+	WORD 1
+	WORD 3
+	WORD 5
+	WORD 9
+	WORD 14
 
 TECLA_CARREGADA: WORD 0
 
@@ -146,9 +163,6 @@ inicio:
 						                ; à última da pilha
 	MOV  BTE,  BTE_START										
 
-	EI0
-	EI2
-	EI
 
 	MOV  R3, 0
 	CALL display
@@ -159,6 +173,7 @@ inicio:
     MOV  [APAGA_ECRÃ], R1				; apaga todos os pixels já desenhados (o valor de R1 não é relevante)
 	MOV	 R1, 1							; cenário de fundo número 1
     MOV  [SELECIONA_CENARIO_FUNDO], R1	; seleciona o cenário de fundo
+	MOV  R11, 0
 
 	CALL teclado
 
@@ -170,8 +185,14 @@ menu:
 	JNZ  menu
 
 start:
+
+	EI0
+	EI2
+	EI
+
 	CALL boneco
 	CALL meteoro
+	
 	
 	MOV  R0, 0
 	MOV  [PAUSA], R0
@@ -372,10 +393,16 @@ movimento_boneco:
 PROCESS SP_inicial_meteoro
 
 meteoro:
-    MOV  R1, LINHA_POK					; linha do boneco
+	MOV  R10, LINHAS
+    MOV  R1, [R10]					    ; linha do boneco
+	ADD  R10, 2
     MOV  R2, COLUNA_POK					; coluna do boneco
-	MOV	 R4, [DEF_METEOROS]				; endereço da tabela que define o boneco
+	MOV  R3, DEF_METEOROS	
+	ADD  R3, R11
+	MOV	 R4, [R3]						; endereço da tabela que define o boneco
 	MOV	 R8, [R4]
+	MOV  R5, NUMERO_METEORITOS_TAM
+	SUB  R5, 1
 	MOV  R0, 1
 	MOV  [SELECIONA_ECRA], R0
 	CALL desenha_boneco					; desenha o boneco a partir da tabela
@@ -399,9 +426,13 @@ ciclo_meteoro:
 	JZ   acaba_meteoro
 
 desce_pok:
-	
 	CALL apaga_boneco                   ; apaga o "meteorito" na posição atual
 	ADD  R1, 1                          ; incrementa o valor da posição da linha
+	MOV  R0, [R10]
+	CMP  R0, R1
+	JZ   muda_meteoro
+
+acaba_desenho:
 	CALL desenha_boneco                 ; desenha o "meteorito" na nova posição
 	MOV  R0, 0                         
 	MOV  [MOV_DOWN], R0
@@ -416,6 +447,16 @@ acaba_meteoro:
 	MOV  R0, 0                         
 	MOV  [MOV_DOWN], R0
 	JMP  ciclo_meteoro
+
+muda_meteoro:
+	CMP  R5, 0
+	JZ   acaba_desenho
+	SUB  R5, 1
+	ADD  R10, 2
+	ADD  R3, 2
+	MOV  R4, [R3]
+	MOV  R8, [R4]
+	JMP  acaba_desenho
 	
 sair_meteoro:
 	YIELD
