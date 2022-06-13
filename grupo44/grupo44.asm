@@ -10,6 +10,7 @@
 ; *********************************************************************************
 TEC_LIN				     EQU 0C000H	      ; endereço das linhas do teclado
 TEC_COL				     EQU 0E000H	      ; endereço das colunas do teclado (periférico PIN)
+
 LINHA_TECLADO            EQU 8		      ; linha a testar (4ª linha, 1000b)
 MASCARA				     EQU 0FH	      ; para isolar os 4 bits de menor peso, ao ler as colunas do teclado
 
@@ -33,20 +34,34 @@ MOSTRAR_ECRA			 EQU 6006H
 ESCONDER_ECRA			 EQU 6008H
 SELECIONA_ECRA			 EQU 6004H
 
-LINHA        		     EQU 25           ; linha do boneco (a meio do ecrã))
+LINHA        		     EQU 27
 COLUNA					 EQU 30           ; coluna do boneco (a meio do ecrã)
 
-LINHA_POK				 EQU 1            ; linha do "meteorito"
-COLUNA_POK				 EQU 6            ; coluna do "meteorito"
+COLUNA_1				 EQU 1
+COLUNA_2				 EQU 8
+COLUNA_3				 EQU 16
+COLUNA_4 				 EQU 24
+COLUNA_5				 EQU 32
+COLUNA_6				 EQU 40
+COLUNA_7				 EQU 48
+COLUNA_8				 EQU 56
+
+LINHA_METEORO_1			 EQU 1
+LINHA_METEORO_2			 EQU 3
+LINHA_METEORO_3			 EQU 5
+LINHA_METEORO_4			 EQU 9
+LINHA_METEORO_5			 EQU 14
+
 
 MIN_COLUNA				 EQU 0		      ; número da coluna mais à esquerda que o objeto pode ocupar
 MAX_COLUNA				 EQU 63           ; número da coluna mais à direita que o objeto pode ocupar
 MAX_LINHA  				 EQU 32
-ATRASO			 		 EQU 29H		  ; atraso para limitar a velocidade de movimento do boneco
+ATRASO			 		 EQU 90H		  ; atraso para limitar a velocidade de movimento do boneco
 
 LARGURA					 EQU 5 			  ; largura do boneco
 LARGURA_MEDIA			 EQU 3			  ; largura dos meteoros de tamanho médio
 LARGURA_PEQUENA			 EQU 2            ; largura dos meteoros de tamanho pequeno
+LARGURA_QUADRADO		 EQU 1
 COR_PIXEL_VERMELHO		 EQU 0FF00H		  ; cor do pixel: vermelho em ARGB (opaco e vermelho no máximo, verde e azul a 0)
 COR_PIXEL_AMARELO   	 EQU 0FFD3H       ; cor do pixel: amarelo em ARGB (com opacidade máxima)
 COR_PIXEL_PRETO     	 EQU 0F000H       ; cor do pixel: preto em ARGB (com opacidade máxima)
@@ -75,11 +90,11 @@ SP_inicial_boneco:
 SP_inicial_meteoro:
 
 DEF_QUADRADO_PEQUENO:
-	WORD		1
+	WORD		LARGURA_QUADRADO
 	WORD		COR_PIXEL_PRETO
 
 DEF_QUADRADO:
-	WORD		2
+	WORD		LARGURA_PEQUENA
 	WORD		COR_PIXEL_PRETO, COR_PIXEL_PRETO
 	WORD		COR_PIXEL_PRETO, COR_PIXEL_PRETO
 
@@ -133,12 +148,22 @@ DEF_METEOROS:
 	WORD       DEF_QUADRADO_PEQUENO, DEF_QUADRADO,DEF_PATO_PEQUENO, DEF_PATO_MEDIO, DEF_PATO
 	WORD       DEF_QUADRADO_PEQUENO, DEF_QUADRADO, DEF_POKEBOLA_PEQUENA, DEF_POKEBOLA_MEDIA, DEF_POKEBOLA
 
+COLUNAS:
+	WORD COLUNA_1
+	WORD COLUNA_2
+	WORD COLUNA_3
+	WORD COLUNA_4
+	WORD COLUNA_5
+	WORD COLUNA_6
+	WORD COLUNA_7
+	WORD COLUNA_8
+
 LINHAS:
-	WORD 1
-	WORD 3
-	WORD 5
-	WORD 9
-	WORD 14
+	WORD LINHA_METEORO_1
+	WORD LINHA_METEORO_2
+	WORD LINHA_METEORO_3
+	WORD LINHA_METEORO_4
+	WORD LINHA_METEORO_5
 
 TECLA_CARREGADA: WORD 0
 
@@ -396,7 +421,12 @@ meteoro:
 	MOV  R10, LINHAS
     MOV  R1, [R10]					    ; linha do boneco
 	ADD  R10, 2
-    MOV  R2, COLUNA_POK					; coluna do boneco
+	SUB  R1, 2
+
+	CALL escolhe_meteoro
+	CALL escolhe_coluna
+
+    MOV  R2, R0					; coluna do boneco
 	MOV  R3, DEF_METEOROS	
 	ADD  R3, R11
 	MOV	 R4, [R3]						; endereço da tabela que define o boneco
@@ -460,7 +490,7 @@ muda_meteoro:
 	
 sair_meteoro:
 	YIELD
-	JMP  sair_meteoro
+	JMP  meteoro
 
 ; **********************************************************************
 ; DESENHA_BONECO - Desenha um boneco na linha e coluna indicadas
@@ -627,9 +657,7 @@ converte_hex_dec:
 	MOV R6, 0						; inicializar a 0 o valor em decimal - output
 	MOV R5, 10H						; valor da divisão entre duas casas hexadecimais seguidas
 	MOV R4, 0AH						; valor da divisão entre duas casas decimais seguidas
-	MOV R2, 1						; inicializar valor pelo qual a computação duma certa casa hexadecimal
-									; será multiplicada (16H^[nºcasa hexadecimal em questão])
-									
+								
 	MOV R7, 16H						; razão da progressão geométrica ainda agora descrita
 	JMP converte_loop
 
@@ -650,17 +678,28 @@ converte_loop:
 									; logo último digito do [ultimo digito do input] em decimal = 12%10 = 2
 	
 	MUL R0, R5
-	
-	MUL R0, R2						; multiplicar computação pelo valor de uma unidade na casa hexadecimal em questão
-	MUL R1, R2
+
 
 	ADD R6, R1						; adicionar as duas computações parciais ao output
 	ADD R6, R0
-	
-	MUL R2, R7						; atualizar valor pelo qual a próxima casa hexadecimal deve ser multiplicada
-	CMP R3, 0						; já não há casas hexadecimais a serem computadas?
-	JNZ converte_loop				; se não, continuar loop
 
+	CMP R3, 0						; já não há casas hexadecimais a serem computadas?
+	JZ retirar_letras
+
+converte_segunda_passagem:
+	MOV R1, 2
+	MOV R2, 5
+
+	MOV R0, R3
+	DIV R0, R1 
+	ADD R0, R3
+	MUL R0, R5
+	ADD R0, R3
+	MOD R3, R1 
+	MUL R3, R2
+	ADD R0, R3
+
+	ADD R6, R0						; adicionar a última computação parciais ao output
 
 retirar_letras:						; a computação anterior deixa algumas letras no output por retirar (onde por exemplo "1C" = 10 + 12 = 22)
 	MOV R3, R6						; colocar output anterior no R3 como no início da rotina
@@ -734,22 +773,79 @@ display:
 	RET
 
 
+numero_aleatorio:
+	PUSH R1
+
+	MOV  R1, TEC_COL
+	MOV  R0, [R1]
+	SHR  R0, 13
+
+	POP  R1
+	RET
+
+escolhe_meteoro:
+	PUSH R1
+
+	CALL numero_aleatorio
+	MOV  R1, 6
+	CMP  R0, R1
+	JGE  meteoro_bom
+	MOV  R11, 10
+	JMP  sai_meteoro_aleatorio
+
+meteoro_bom:
+	MOV  R11, 0
+
+sai_meteoro_aleatorio:
+	POP  R1
+	RET
+
+escolhe_coluna:
+	PUSH R1
+
+	CALL numero_aleatorio
+	MOV  R1, 2
+	MUL  R0, R1
+	MOV  R1, COLUNAS
+	ADD  R1, R0
+	MOV  R0, [R1]
+	
+
+	POP  R1
+	RET
+
 ; Interrupts
 
 meteoros_interrupt:
 	PUSH R0
+	PUSH R1
+
+	MOV  R0, [PAUSA]
+	MOV  R1, 1
+	CMP  R0, R1
+	JZ  meteoros_int_saida
 
 	MOV  R0, 1
 	MOV  [MOV_DOWN], R0
 
+meteoros_int_saida:
+	POP  R1
 	POP  R0
 	RFE
 
 vida_interrupt:
 	PUSH R0
+	PUSH R1
+
+	MOV  R0, [PAUSA]
+	MOV  R1, 1
+	CMP  R0, R1
+	JZ  vida_saida
 
 	MOV  R0, 1
 	MOV  [DESCE_VIDA], R0
-	
-	POP R0
+
+vida_saida:
+	POP  R1
+	POP  R0
 	RFE
