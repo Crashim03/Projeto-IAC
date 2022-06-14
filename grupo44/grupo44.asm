@@ -17,7 +17,7 @@ MASCARA				     EQU 0FH	      ; para isolar os 4 bits de menor peso, ao ler as c
 TECLA_ESQUERDA			 EQU 11H	      ; tecla 0
 TECLA_DIREITA		     EQU 14H	      ; tecla 2
 TECLA_START			     EQU 81H          ; tecla C
-TECLA_DISPARAR 			 EQU 12H
+TECLA_DISPARAR 			 EQU 12H		  ; tecla 1
 TECLA_PAUSAR			 EQU 82H
 TECLA_TERMINAR			 EQU 84H
 
@@ -62,12 +62,14 @@ LARGURA					 EQU 5 			  ; largura do boneco
 LARGURA_MEDIA			 EQU 3			  ; largura dos meteoros de tamanho médio
 LARGURA_PEQUENA			 EQU 2            ; largura dos meteoros de tamanho pequeno
 LARGURA_QUADRADO		 EQU 1
+ALTURA_TIRO				 EQU 4
 COR_PIXEL_VERMELHO		 EQU 0FF00H		  ; cor do pixel: vermelho em ARGB (opaco e vermelho no máximo, verde e azul a 0)
 COR_PIXEL_AMARELO   	 EQU 0FFD3H       ; cor do pixel: amarelo em ARGB (com opacidade máxima)
 COR_PIXEL_PRETO     	 EQU 0F000H       ; cor do pixel: preto em ARGB (com opacidade máxima)
 COR_PIXEL_CINZENTO  	 EQU 0F79CH       ; cor do pixel: cinzento em ARGB (com opacidade máxima)
 COR_PIXEL_BRANCO		 EQU 0FFFFH       ; cor do pixel: branco em ARGB (com opacidade máxima)
 COR_PIXEL_LARANJA        EQU 0F4ABH       ; cor do pixel: laranja em ARGB (com opacidade máxima)
+COR_PIXEL_AZUL	         EQU 0F4ABH       ; cor do pixel: azul em ARGB (com opacidade máxima)
 
 VIDA_MAX    			 EQU 064H		  ; valor inicial da grandeza "vida", que aparece no display
 NUMERO_METEORITOS_TAM    EQU 5
@@ -88,6 +90,9 @@ SP_inicial_boneco:
 
 	STACK 100H
 SP_inicial_meteoro:
+
+	STACK 100H
+SP_desenha_tiro:
 
 DEF_QUADRADO_PEQUENO:
 	WORD		LARGURA_QUADRADO
@@ -148,6 +153,13 @@ DEF_METEOROS:
 	WORD       DEF_QUADRADO_PEQUENO, DEF_QUADRADO,DEF_PATO_PEQUENO, DEF_PATO_MEDIO, DEF_PATO
 	WORD       DEF_QUADRADO_PEQUENO, DEF_QUADRADO, DEF_POKEBOLA_PEQUENA, DEF_POKEBOLA_MEDIA, DEF_POKEBOLA
 
+DEF_TIRO:
+	WORD	   LARGURA_QUADRADO
+	WORD	   COR_PIXEL_AZUL
+	WORD	   COR_PIXEL_AZUL
+	WORD	   COR_PIXEL_AZUL
+	WORD	   COR_PIXEL_AZUL
+
 COLUNAS:
 	WORD COLUNA_1
 	WORD COLUNA_2
@@ -169,13 +181,19 @@ TECLA_CARREGADA: WORD 0
 
 MOV_DOWN: WORD 0
 
+MOV_UP: WORD 0
+
 PAUSA: WORD 1
 
 DESCE_VIDA: WORD 0
 
+RESTART: WORD 0
+
+POS_BONECO: WORD 0
+
 BTE_START:
 	WORD meteoros_interrupt
-	WORD 0
+	WORD tiros_interrupt
 	WORD vida_interrupt
 	WORD 0
 
@@ -208,16 +226,26 @@ menu:
 	MOV  R1, [TECLA_CARREGADA]
 	CMP  R0, R1
 	JNZ  menu
+	JMP  start
+	
+restart:
+	MOV  R0, 1
+	MOV  [RESTART], R0
+	YIELD
+	MOV  R0, 0
+	MOV  [RESTART], R0
+	JMP  start_2
 
 start:
-
 	EI0
+	EI1
 	EI2
-	EI
+	EI 
 
 	CALL boneco
 	CALL meteoro
-	
+
+start_2:
 	
 	MOV  R0, 0
 	MOV  [PAUSA], R0
@@ -239,20 +267,46 @@ main:
 	CMP  R0, R1
 	JZ   pausa
 
+	MOV  R0, TECLA_TERMINAR
+	CMP  R0, R1
+	JZ   game_over
+	
 	MOV  R0, [PAUSA]
 	MOV  R1, 1
 	CMP  R0, R1
-	JZ   main
+	JZ   pausado
 
 	MOV  R0, [DESCE_VIDA]
 	MOV  R1, 1
 	CMP  R1, R0
 	JZ   desce_vida
-	
+
+	MOV  R0, TECLA_DISPARAR
+	MOV  R1, [TECLA_CARREGADA]
+	CMP  R1, R0
+	JZ   tiro
+
 	JMP  main
 
+tiro:
+	CALL  desenha_tiro
+	MOV  R0, -5
+	CALL adiciona_vida
+	JMP   main
+
+pausado:
+	MOV  R1, [TECLA_CARREGADA]
+	MOV  R0, TECLA_START
+	CMP  R0, R1
+	JZ   restart
+	JMP  main
+	
+
 desce_vida:
-	SUB  R3, 5
+	MOV  R0, -5
+	CALL adiciona_vida
+	MOV  R0, 0
+	CMP  R0, R3
 	JZ   game_over
 	CALL display
 	MOV  R0, 0
@@ -285,13 +339,23 @@ pausar:
 
 game_over:
 	CALL display
-	MOV  R0, 0
+	MOV  R0, 3
 	MOV  [SELECIONA_CENARIO_FUNDO], R0
 	MOV  R0, 0
 	MOV  [ESCONDER_ECRA], R0
 	MOV  R0, 1
 	MOV  [ESCONDER_ECRA], R0
-	JMP game_over
+	MOV  [PAUSA], R0
+
+game_over_loop:
+	YIELD
+
+	MOV  R0, [TECLA_CARREGADA]
+	MOV  R1, TECLA_START
+	CMP  R1, R0
+	JZ   restart
+
+	JMP  game_over_loop
 
 ; **********************************************************************
 ; TECLADO - Faz uma leitura às teclas do teclado e retorna o valor lido
@@ -366,9 +430,14 @@ boneco:
 
 ciclo_boneco:
 	YIELD
-	
+
 	MOV  R0, 0
 	MOV  [SELECIONA_ECRA], R0
+
+	MOV  R0, [RESTART]
+	MOV  R6, 1
+	CMP  R0, R6
+	JZ   restart_boneco
 
 	MOV  R0, [PAUSA]
 	CMP  R0, 1
@@ -388,6 +457,10 @@ move_direita:
 	CMP  R7, 0
 	JNZ  ciclo_atraso
 	JMP  ciclo_boneco
+
+restart_boneco:
+	CALL apaga_boneco
+	JMP  boneco
 
 move_esquerda:
 	MOV	 R7, -1							; vai deslocar para a esquerda
@@ -411,7 +484,8 @@ ciclo_atraso:
 movimento_boneco:
 	MOV  R11, ATRASO
 	CALL apaga_boneco
-	ADD R2, R7
+	ADD  R2, R7
+	MOV  [POS_BONECO], R2
 	CALL desenha_boneco
 	JMP ciclo_boneco
 
@@ -421,7 +495,7 @@ meteoro:
 	MOV  R10, LINHAS
     MOV  R1, [R10]					    ; linha do boneco
 	ADD  R10, 2
-	SUB  R1, 2
+	SUB  R1, 1
 
 	CALL escolhe_meteoro
 	CALL escolhe_coluna
@@ -442,6 +516,12 @@ ciclo_meteoro:
 
 	MOV  R0, 1
 	MOV  [SELECIONA_ECRA], R0
+	
+	MOV  R0, [RESTART]
+	MOV  R6, 1
+	CMP  R0, R6
+	JZ   restart_meteoro
+
 	
 	MOV  R0, [PAUSA]
 	CMP  R0, 1
@@ -488,9 +568,79 @@ muda_meteoro:
 	MOV  R8, [R4]
 	JMP  acaba_desenho
 	
+restart_meteoro:
+	CALL apaga_boneco
+	JMP  meteoro
+
 sair_meteoro:
 	YIELD
 	JMP  meteoro
+
+PROCESS SP_desenha_tiro
+
+desenha_tiro:
+	MOV R4, DEF_TIRO
+	MOV R8, ALTURA_TIRO
+	MOV  R5, LARGURA_QUADRADO
+	MOV R1, LINHA
+	SUB R1, 4
+	MOV R2, [POS_BONECO] 
+	ADD R2, 2
+	MOV R0, 2							; seleciona ecrã no qual o tiro vai ser desenhado
+	MOV [SELECIONA_ECRA], R0
+	CALL desenha_boneco
+	
+ciclo_tiro:
+	YIELD
+
+	MOV  R0, [RESTART]
+	MOV  R6, 1
+	CMP  R0, R6
+	JZ   restart_tiro
+
+	MOV  R0, 2
+	MOV  [SELECIONA_ECRA], R0
+
+	MOV  R0, [PAUSA]
+	CMP  R0, 1
+	JZ   ciclo_tiro
+
+	MOV  R0, [MOV_UP]
+	CMP  R0, 1
+	JZ   sobe_tiro
+
+	MOV  R0, LINHA_METEORO_5
+	CMP  R1, R0
+	JZ   acaba_meteoro
+
+sobe_tiro:
+	CALL apaga_boneco
+	SUB R1, 1
+
+acaba_desenho_tiro:
+	CALL desenha_boneco
+	MOV R0, 0
+	MOV [MOV_UP], R0
+	JMP ciclo_tiro
+
+acaba_tiro:
+	CALL apaga_boneco
+	SUB R8, 1
+	JZ sair_tiro
+	ADD R1, 1
+	CALL desenha_boneco
+	MOV R0, 0
+	MOV [MOV_UP], R0
+	JMP ciclo_tiro
+
+restart_tiro:
+	CALL apaga_boneco
+	JMP  desenha_tiro
+
+sair_tiro:
+	YIELD
+	JMP desenha_tiro
+
 
 ; **********************************************************************
 ; DESENHA_BONECO - Desenha um boneco na linha e coluna indicadas
@@ -517,7 +667,7 @@ desenha_boneco:
 	MOV  R0, R2             ; coloca valor da coluna num registo temporário
 	MOV	 R6, [R4]			; obtém a largura do boneco
 	MOV  R5, R6             ; número de colunas a tratar
-	MOV  R7, R8                 ; número de linhas a tratar
+	MOV  R7, R8             ; número de linhas a tratar
 	ADD	 R4, 2				; endereço da cor do 1º pixel (2 porque a largura é uma word)
 desenha_pixels:       		; desenha os pixels do boneco a partir da tabela
 	MOV	 R3, [R4]			; obtém a cor do próximo pixel do boneco
@@ -638,7 +788,7 @@ impede_movimento:
 sai_testa_limites:	
 	POP	 R6 
 	POP	 R5
-	RET
+	RET	
 
 ; **********************************************************************
 ; CONVERTE_HEX_DEC - converte o valor da vida de hexadecimal para decimal
@@ -748,6 +898,29 @@ converte_saida:
 	POP R1
 	RET
 
+adiciona_vida:
+	ADD  R3, R0
+	MOV  R0, 0
+	CMP  R0, R3
+	JGE  vida_zero
+
+	MOV  R0, 100
+	CMP  R3, R0
+	JGE  vida_cem
+
+	JMP  sair_vida
+
+vida_zero:
+	MOV  R3, 0
+	JMP  sair_vida
+
+vida_cem:
+	MOV  R3, 100
+
+sair_vida:
+	CALL display
+	RET
+
 ; **********************************************************************
 ; DISPLAY - mostra o valor da grandeza "vida" ao utilizador
 
@@ -814,6 +987,7 @@ escolhe_coluna:
 	POP  R1
 	RET
 
+
 ; Interrupts
 
 meteoros_interrupt:
@@ -829,6 +1003,23 @@ meteoros_interrupt:
 	MOV  [MOV_DOWN], R0
 
 meteoros_int_saida:
+	POP  R1
+	POP  R0
+	RFE
+
+tiros_interrupt:
+	PUSH R0
+	PUSH R1
+
+	MOV  R0, [PAUSA]
+	MOV  R1, 1
+	CMP  R0, R1
+	JZ  tiros_int_saida
+
+	MOV  R0, 1
+	MOV  [MOV_UP], R0
+
+tiros_int_saida:
 	POP  R1
 	POP  R0
 	RFE
