@@ -163,7 +163,7 @@ DEF_EXPLOSAO:			; tabela que define a explosão de um meteoro (cor, largura, pix
 	
 
 DEF_METEOROS:			; tabela que define o o tipo e o tamanho dos meteoros
-	WORD       DEF_QUADRADO_PEQUENO, DEF_QUADRADO,DEF_PATO_PEQUENO, DEF_PATO_MEDIO, DEF_PATO
+	WORD       DEF_QUADRADO_PEQUENO, DEF_QUADRADO, DEF_PATO_PEQUENO, DEF_PATO_MEDIO, DEF_PATO
 	WORD       DEF_QUADRADO_PEQUENO, DEF_QUADRADO, DEF_POKEBOLA_PEQUENA, DEF_POKEBOLA_MEDIA, DEF_POKEBOLA
 
 DEF_TIRO:				; tabela que define o míssil (cor, largura, pixels)
@@ -262,7 +262,7 @@ start:
 	EI 
 
 	CALL boneco
-	;CALL meteoro
+	CALL meteoro
 	CALL desenha_tiro
 
 start_2:
@@ -290,6 +290,11 @@ main:
 
 	MOV  R0, TECLA_TERMINAR
 	CMP  R0, R1
+	JZ   game_over
+
+	MOV  R0, 0
+	MOV  R1, [VIDA]
+	CMP  R1, R0
 	JZ   game_over
 	
 	MOV  R0, [PAUSA]
@@ -556,7 +561,7 @@ desce_meteoro:
 	MOV  R0, [R10]
 	CMP  R0, R1
 	JZ   muda_meteoro
-	;CALL verifica_colisao_player	    ; verifica se está a ocorrer uma colisão entre o player e o meteoro
+	CALL verifica_colisao_player	    ; verifica se está a ocorrer uma colisão entre o player e o meteoro
 	
 
 acaba_desenho:
@@ -789,16 +794,17 @@ escreve_pixel:
 ; VERIFICA_COLISAO_PLAYER - Verifica colisões entre player e meteoros.
 ; Argumentos:   R1 - linha do meteoro
 ;               R2 - coluna do meteoro
+;				R11 - indice na tabela dos meteoros(a partir do indice 10 estamos perante um meteoro mau)
 ;
 ; **********************************************************************
 verifica_colisao_player:
 	PUSH R0
 	MOV R0, LINHA
 	CMP R1, R0				; verificar se o meteoro se encontra na mesma linha que o player
-	JNZ verifica_sair
+	JNZ verifica_sair_met
 	MOV R0, [POS_BONECO]
 	CMP R2, R0
-	JNZ verifica_sair
+	JNZ verifica_sair_met
 
 meteoro_bom_ou_mau:
 	MOV R0, 10
@@ -806,9 +812,10 @@ meteoro_bom_ou_mau:
 	JGE meteoro_bom_colisao
 
 meteoro_mau_colisao:
-	MOV R0, 0
+	MOV R3, 0
 	MOV [VIDA], R0			; se for meteoro mau, tirar toda a vida, pra dar gameover
-	JMP verifica_sair
+	CALL display
+	JMP verifica_sair_met
 
 meteoro_bom_colisao:
 	MOV R0, +5	
@@ -821,7 +828,7 @@ meteoro_bom_colisao:
 
 	CALL apaga_boneco
 
-verifica_sair:
+verifica_sair_met:
 	POP R0
 	RET
 
@@ -832,27 +839,25 @@ verifica_sair:
 ;               R2 - coluna do meteoro
 ;
 ; **********************************************************************
-;verifica_colisao_player:
-;	PUSH R0
-;	MOV R0, LINHA
-;	CMP R1, R0				; verificar se o meteoro se encontra na mesma linha que o player
-;	JNZ verifica_sair
-;	MOV R0, [POS_BONECO]
-;	CMP R2, R0
-;	JNZ verifica_sair
-;
-;explosao:
-;	MOV  R4, DEF_EXPLOSAO					; tabela que define o desenho da explosão
-;	MOV  R8, LARGURA
-;	MOV R5, R8
-;	MOV R6, R8
-;	CALL e
-;	CALL atraso
-;	CALL apanha_boneco
-;
-;verifica_sair:
-;	POP R0
-;	RET
+verifica_colisao_tiro:
+	PUSH R0
+	MOV R0, LINHA
+	CMP R1, R0				; verificar se o meteoro se encontra na mesma linha que o player
+	JNZ verifica_sair_tiro
+	MOV R0, [POS_BONECO]
+	CMP R2, R0
+	JNZ verifica_sair_tiro
+
+explosao:
+	MOV  R4, DEF_EXPLOSAO					; tabela que define o desenho da explosão
+	MOV  R8, LARGURA
+	MOV R5, R8
+	MOV R6, R8
+	CALL ciclo_atraso
+
+verifica_sair_tiro:
+	POP R0
+	RET
 
 	
 
