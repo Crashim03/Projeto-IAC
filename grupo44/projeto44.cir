@@ -718,8 +718,8 @@
     "positionX" : 206,
     "positionY" : 90,
     "simGuiVisibleInSimulation" : true,
-    "simGuiXRelative" : 0,
-    "simGuiYRelative" : 0,
+    "simGuiXRelative" : -6,
+    "simGuiYRelative" : 62,
     "simGuiWidth" : 740,
     "simGuiHeight" : 818,
     "clockPeriod" : 200,
@@ -1432,7 +1432,7 @@
     "positionX" : 782,
     "positionY" : 486,
     "simGuiVisibleInSimulation" : true,
-    "simGuiXRelative" : 992,
+    "simGuiXRelative" : 985,
     "simGuiYRelative" : 613,
     "simGuiWidth" : 140,
     "simGuiHeight" : 159,
@@ -1503,8 +1503,8 @@
     "positionX" : 648,
     "positionY" : 237,
     "simGuiVisibleInSimulation" : true,
-    "simGuiXRelative" : 672,
-    "simGuiYRelative" : 54,
+    "simGuiXRelative" : 700,
+    "simGuiYRelative" : 81,
     "simGuiWidth" : 819,
     "simGuiHeight" : 410,
     "columnAddressNBits" : 6,
@@ -1513,6 +1513,49 @@
     "windowScreenHeightixels" : 512,
     "defaultPenColor" : 51063,
     "image paths" : [ "xp_wallpaper_1.jpg", "Menu.jpeg", "Pause.jpeg", "Game_over.jpeg" ],
+    "sounds/videos settings" : [ {
+      "filePathName" : "sounds_proj_iac\\Theme Song.mp3",
+      "relative sound volume" : 1.0,
+      "relative start time" : 0.0,
+      "relative stop time" : 1.0,
+      "playAsClip" : false
+    }, {
+      "filePathName" : "sounds_proj_iac\\explosão.wav",
+      "relative sound volume" : 1.0,
+      "relative start time" : 0.0,
+      "relative stop time" : 1.0,
+      "playAsClip" : false
+    }, {
+      "filePathName" : "sounds_proj_iac\\game_over.wav",
+      "relative sound volume" : 1.0,
+      "relative start time" : 0.0,
+      "relative stop time" : 1.0,
+      "playAsClip" : false
+    }, {
+      "filePathName" : "sounds_proj_iac\\pato.wav",
+      "relative sound volume" : 1.0,
+      "relative start time" : 0.0,
+      "relative stop time" : 1.0,
+      "playAsClip" : false
+    }, {
+      "filePathName" : "sounds_proj_iac\\pause_unpause.wav",
+      "relative sound volume" : 1.0,
+      "relative start time" : 0.0,
+      "relative stop time" : 1.0,
+      "playAsClip" : false
+    }, {
+      "filePathName" : "sounds_proj_iac\\start_restart.mp3",
+      "relative sound volume" : 1.0,
+      "relative start time" : 0.0,
+      "relative stop time" : 1.0,
+      "playAsClip" : false
+    }, {
+      "filePathName" : "sounds_proj_iac\\tiro.wav",
+      "relative sound volume" : 1.0,
+      "relative start time" : 0.0,
+      "relative stop time" : 1.0,
+      "playAsClip" : false
+    } ],
     "addressable data" : {
       "className" : "ModuleExtensionMemoryMediaCenter",
       "elementID" : 83,
