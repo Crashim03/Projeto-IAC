@@ -42,6 +42,8 @@ CONTINUA_MUSICA          EQU 6060H
 LINHA        		     EQU 27			  ; linha do boneco
 COLUNA					 EQU 30           ; coluna do boneco (a meio do ecrã)
 
+N_METEOROS  			 EQU 4			  ; número de meteoros no ecrã
+
 ; Colunas em que os meteoros podem aparecer
 COLUNA_1				 EQU 1            
 COLUNA_2				 EQU 8
@@ -65,24 +67,23 @@ ALCANCE_TIRO			 EQU 15
 MIN_COLUNA				 EQU 0		      ; número da coluna mais à esquerda que o objeto pode ocupar
 MAX_COLUNA				 EQU 63           ; número da coluna mais à direita que o objeto pode ocupar
 MAX_LINHA  				 EQU 32			  ; número da linha mais abaixo que o objeto pode ocupar
-ATRASO			 		 EQU 90H		  ; atraso para limitar a velocidade de movimento do boneco
+ATRASO			 		 EQU 10H		  ; atraso para limitar a velocidade de movimento do boneco
 ATRASO_METEORO_DEST      EQU 01400H
 
 LARGURA					 EQU 5 			  ; largura do boneco
 LARGURA_MEDIA			 EQU 3			  ; largura dos meteoros de tamanho médio
 LARGURA_PEQUENA			 EQU 2            ; largura dos meteoros de tamanho pequeno
 LARGURA_QUADRADO		 EQU 1			  ; largura de um quadrado pequeno
-ALTURA_TIRO				 EQU 5			  ; altura máxima que o míssil pode ir
 
 COR_PIXEL_VERMELHO		 EQU 0FF00H		  ; cor do pixel: vermelho em ARGB (opaco e vermelho no máximo, verde e azul a 0)
 COR_PIXEL_AMARELO   	 EQU 0FFD3H       ; cor do pixel: amarelo escuro em ARGB (com opacidade máxima)
 COR_PIXEL_AMARELO_PATO 	 EQU 0FFF0H       ; cor do pixel: amarelo claro em ARGB (com opacidade máxima)
 COR_PIXEL_PRETO     	 EQU 0F000H       ; cor do pixel: preto em ARGB (com opacidade máxima)
-COR_PIXEL_CINZENTO  	 EQU 0F79CH       ; cor do pixel: cinzento em ARGB (com opacidade máxima)
+COR_PIXEL_CINZENTO  	 EQU 0F888H       ; cor do pixel: cinzento em ARGB (com opacidade máxima)
 COR_PIXEL_BRANCO		 EQU 0FFFFH       ; cor do pixel: branco em ARGB (com opacidade máxima)
 COR_PIXEL_LARANJA        EQU 0FFB6H       ; cor do pixel: laranja em ARGB (com opacidade máxima)
 COR_PIXEL_AZUL	         EQU 0F4ABH       ; cor do pixel: azul em ARGB (com opacidade máxima)
-COR_PIXEL_PRETO_TRANSP   EQU 0E000H       ; cor do pixel: preto em ARGB (com alguma opacidade)
+COR_PIXEL_PRETO_TRANSP   EQU 0B888H       ; cor do pixel: preto em ARGB (com alguma opacidade)
 
 VIDA_MAX    			 EQU 064H		  ; valor inicial da grandeza "vida", que aparece no display
 NUMERO_METEORITOS_TAM    EQU 5			  ; numero de tamanhos que um meteoro pode ter
@@ -102,19 +103,37 @@ SP_inicial_teclado:
 SP_inicial_boneco:
 
 	STACK 100H
-SP_inicial_meteoro:
+SP_desenha_tiro:
+
+; SP inicial de cada processo "meteoro"
 
 	STACK 100H
-SP_desenha_tiro:
+SP_inicial_meteoro_1:
+
+	STACK 100H
+SP_inicial_meteoro_2:
+
+	STACK 100H
+SP_inicial_meteoro_3:
+
+	STACK 100H
+SP_inicial_meteoro_4:
+
+; tabela com os SP iniciais de cada processo "meteoro"
+meteoros_SP_tab:
+	WORD	SP_inicial_meteoro_1
+	WORD	SP_inicial_meteoro_2
+	WORD	SP_inicial_meteoro_3
+	WORD	SP_inicial_meteoro_4
 
 DEF_QUADRADO_PEQUENO:	; tabela que define um quadrado pequeno (cor, largura, pixels)
 	WORD		LARGURA_QUADRADO
-	WORD		COR_PIXEL_PRETO
+	WORD		COR_PIXEL_PRETO_TRANSP
 
 DEF_QUADRADO:			; tabela que define um quadrado (cor, largura, pixels)
 	WORD		LARGURA_PEQUENA
-	WORD		COR_PIXEL_PRETO, COR_PIXEL_PRETO
-	WORD		COR_PIXEL_PRETO, COR_PIXEL_PRETO
+	WORD		COR_PIXEL_PRETO_TRANSP, COR_PIXEL_PRETO_TRANSP
+	WORD		COR_PIXEL_PRETO_TRANSP, COR_PIXEL_PRETO_TRANSP
 
 DEF_BONECO:				; tabela que define o boneco (cor, largura, pixels)
 	WORD		LARGURA
@@ -178,10 +197,6 @@ DEF_METEOROS:			; tabela que define o o tipo e o tamanho dos meteoros
 DEF_TIRO:				; tabela que define o míssil (cor, largura, pixels)
 	WORD	   LARGURA_QUADRADO
 	WORD	   COR_PIXEL_LARANJA
-	WORD	   0
-	WORD	   COR_PIXEL_LARANJA
-	WORD	   0
-	WORD       COR_PIXEL_LARANJA
 
 COLUNAS:				; tabela que define as colunas em que os meteoros podem aparecer
 	WORD COLUNA_1
@@ -202,7 +217,11 @@ LINHAS:					; tabela que define as linhas em que os meteoros mudam de tamanho
 
 TECLA_CARREGADA: WORD 0						; tabela que guarda a tecla que está a ser carregada
 		
-MOV_DOWN: WORD 0							; tabela que guarda 
+MOV_DOWN:
+	WORD 0							; tabela que guarda 
+	WORD 0
+	WORD 0
+	WORD 0
 
 MOV_UP: WORD 0
 
@@ -270,8 +289,14 @@ start:
 	EI 
 
 	CALL boneco
-	CALL meteoro
 	CALL desenha_tiro
+
+	MOV  R0, N_METEOROS
+loop_meteoros:
+	SUB  R0, 1
+	CALL meteoro
+	CMP  R0, 0
+	JNZ  loop_meteoros
 
 start_2:
 
@@ -532,15 +557,20 @@ movimento_boneco:
 	CALL desenha_boneco
 	JMP ciclo_boneco
 
-PROCESS SP_inicial_meteoro
+PROCESS SP_inicial_meteoro_1
 
 meteoro:
+	MOV  R7, R0
+	SHL  R7, 1
+	MOV  R0, meteoros_SP_tab
+	MOV  SP, [R0 + R7]
+
+meteoro_inicio:
+
 	MOV  R10, LINHAS
     MOV  R1, [R10]					    ; linha do boneco
 	ADD  R10, 2
 	SUB  R1, 1
-	MOV  R7, 1
-	MOV  R9, 1
 
 	CALL escolhe_meteoro
 	CALL escolhe_coluna
@@ -552,14 +582,20 @@ meteoro:
 	MOV	 R8, [R4]
 	MOV  R5, NUMERO_METEORITOS_TAM
 	SUB  R5, 1
-	MOV  R0, 1
+	MOV  R0, R7
+	MOV  R6, 2
+	DIV  R0, R6
+	ADD  R0, R6
 	MOV  [SELECIONA_ECRA], R0
 	CALL desenha_boneco					; desenha o boneco a partir da tabela
 
 ciclo_meteoro:
 	YIELD
 
-	MOV  R0, 1
+	MOV  R0, R7
+	MOV  R6, 2
+	DIV  R0, R6
+	ADD  R0, R6
 	MOV  [SELECIONA_ECRA], R0
 	
 	MOV  R0, [RESTART]
@@ -572,16 +608,20 @@ ciclo_meteoro:
 	CMP  R0, 1
 	JZ   ciclo_meteoro
 
-	CALL verifica_colisao	    		; verifica se está a ocorrer uma colisão entre o player e o meteoro
-	MOV  R0, 0
-	CMP  R0, R7
+	CALL verifica_colisao_player	    		; verifica se está a ocorrer uma colisão entre o player e o meteoro
+	CMP  R0, 0
 	JZ   restart_meteoro
-	CMP  R0, R9
+	CALL verifica_colisao_tiro
+	CMP  R0, 0
 	JZ   meteoro_destruido
 	
-	MOV  R0, [MOV_DOWN]
-	CMP  R0, 0
+	MOV  R0, MOV_DOWN
+	ADD  R0, R7
+	MOV  R6, [R0]
+	MOV  R0, 0
+	CMP  R6, R0
 	JZ   ciclo_meteoro
+
 	MOV  R0, MAX_LINHA
 	SUB  R0, R8
 	CMP  R1, R0
@@ -597,8 +637,10 @@ desce_meteoro:
 
 acaba_desenho:
 	CALL desenha_boneco                 ; desenha o "meteorito" na nova posição
-	MOV  R0, 0                         
-	MOV  [MOV_DOWN], R0
+	MOV  R0, MOV_DOWN
+	ADD  R0, R7
+	MOV  R6, 0                      
+	MOV  [R0], R6
 	JMP  ciclo_meteoro                  ; esperar que uma tecla não esteja a ser premida
 
 acaba_meteoro:
@@ -607,12 +649,17 @@ acaba_meteoro:
 	JZ   sair_meteoro
 	ADD  R1, 1                          ; incrementa o valor da posição da linha
 	CALL desenha_boneco                 ; desenha o "meteorito" na nova posição
-	MOV  R0, 0                         
-	MOV  [MOV_DOWN], R0
+	MOV  R0, MOV_DOWN
+	ADD  R0, R7
+	MOV  R6, 0                      
+	MOV  [R0], R6
 	JMP  ciclo_meteoro
 
 meteoro_destruido:
-	MOV  R0, 1
+	MOV  R0, R7
+	MOV  R6, 2
+	DIV  R0, R6
+	ADD  R0, R6
 	MOV  [SELECIONA_ECRA], R0
 	CALL apaga_boneco
 	MOV  R4, DEF_EXPLOSAO			    ; tabela que define desenho da explosão
@@ -621,7 +668,6 @@ meteoro_destruido:
 
 meteoro_destruido_ciclo:
 	YIELD
-	MOV  R0, 1
 	MOV  [SELECIONA_ECRA], R0
 	SUB  R6, 1
 	JZ   restart_meteoro
@@ -639,11 +685,11 @@ muda_meteoro:
 	
 restart_meteoro:
 	CALL apaga_boneco
-	JMP  meteoro
+	JMP  meteoro_inicio
 
 sair_meteoro:
 	YIELD
-	JMP  meteoro
+	JMP  meteoro_inicio
 
 PROCESS SP_desenha_tiro
 
@@ -651,22 +697,21 @@ desenha_tiro:
 	MOV  R0, 0
 	MOV  [DISPAROU], R0					; inicializar booleano a 0, a indicar que ainda não foi disparado um tiro
 	MOV  R4, DEF_TIRO					; tabela que define o boneco
-	MOV  R8, ALTURA_TIRO
+	MOV  R8, LARGURA_QUADRADO
 	MOV  R5, LARGURA_QUADRADO
 	MOV  R1, LINHA						; inicializar linha inicial do tiro
-	SUB  R1, 5							; (4 linhas acima da do player)
 	MOV  [POS_TIRO_LINHA], R1
 	MOV  R2, [POS_BONECO] 				; o tiro deve ser gerado na coluna atual do player
 	ADD  R2, 2							; centralizar tiro com o player(que tem 5 pixeis)
 	MOV  R0, [POS_TIRO_COLUNA]
 	
-	MOV  R0, 2							; seleciona ecrã no qual o tiro vai ser desenhado
+	MOV  R0, 1							; seleciona ecrã no qual o tiro vai ser desenhado
 	MOV  [SELECIONA_ECRA], R0
 	
 ciclo_tiro:
 	YIELD
 
-	MOV  R0, 2
+	MOV  R0, 1
 	MOV  [SELECIONA_ECRA], R0
 
 	MOV  R0, [RESTART]
@@ -738,6 +783,37 @@ restart_tiro:
 	CALL apaga_boneco
 	JMP  desenha_tiro
 
+; **********************************************************************
+; ESCONDER_ECRAS - esconde todos os ecrãs (de 0 a 5)
+;
+; **********************************************************************
+esconder_ecras:
+	PUSH R0
+	MOV R0, 0				; inicializa o número do ecrã a 0
+esconder_ecras_loop:
+	MOV [ESCONDER_ECRA], R0
+	ADD R0, 1				; incrementa valor do ecrã para percorrer todos os ints de 0 a 5
+	CMP R0, 6				; quando ultrapassa o ecrã 5, sair do loop
+	JNZ esconder_ecras_loop
+esconder_ecras_saida:
+	POP R0
+	RET
+
+; **********************************************************************
+; MOSTRAR_ECRAS - mostra todos os ecrãs (de 0 a 5)
+;
+; **********************************************************************
+mostrar_ecras:
+	PUSH R0
+	MOV R0, 0				; inicializa o número do ecrã a 0
+mostrar_ecras_loop:
+	MOV [MOSTRAR_ECRA], R0
+	ADD R0, 1				; incrementa valor do ecrã para percorrer todos os ints de 0 a 5
+	CMP R0, 6				; quando ultrapassa o ecrã 5, sair do loop
+	JNZ mostrar_ecras_loop
+mostrar_ecras_saida:
+	POP R0
+	RET
 
 ; **********************************************************************
 ; DESENHA_BONECO - Desenha um boneco na linha e coluna indicadas
@@ -859,8 +935,7 @@ escreve_pixel:
 ;				R11 - indice na tabela dos meteoros(a partir do indice 10 estamos perante um meteoro mau)
 ;
 ; **********************************************************************
-verifica_colisao:
-	PUSH R0
+verifica_colisao_player:
 	PUSH R3
 	PUSH R5
 
@@ -872,7 +947,7 @@ verifica_colisao:
 
 verifica_colisao_player_2:
 	CMP  R0, LARGURA				; verificar se o meteoro se encontra na mesma linha que o player
-	JGE  verifica_colisao_tiro
+	JGE  nao_ha_colisao_player
 	MOV  R0, [POS_BONECO]
 	SUB  R0, R2
 	MOV  R3, 0
@@ -881,8 +956,7 @@ verifica_colisao_player_2:
 
 verifica_colisao_player_3:
 	CMP  R0, LARGURA
-	JGE  verifica_colisao_tiro
-
+	JGE  nao_ha_colisao_player
 
 meteoro_bom_ou_mau:
 	MOV R0, 10
@@ -893,7 +967,7 @@ meteoro_mau_colisao:
 	MOV R3, 0
 	MOV [VIDA], R3			; se for meteoro mau, tirar toda a vida, pra dar gameover
 	CALL display
-	JMP verifica_sair
+	JMP ha_colisao_player
 
 torna_linha_positiva:
 	MOV  R3, -1
@@ -910,49 +984,74 @@ meteoro_bom_colisao:
 	MOV  R0, +10	
 	CALL adiciona_vida
 	MOV  [VIDA], R3
-	MOV  R7, 0
 	MOV  R0, 3
 	MOV  [REPRODUZ_SOM], R0
-	JMP  verifica_sair
+	JMP  ha_colisao_player
+
+nao_ha_colisao_player:
+	MOV  R0, 1
+	JMP  verifica_sair_player
+
+ha_colisao_player:
+	MOV  R0, 0
+
+verifica_sair_player:
+	POP  R5
+	POP  R3
+	RET 
+
+
+
+
 
 verifica_colisao_tiro:
+	PUSH R3
+	PUSH R5
+
 	MOV  R0, [DISPAROU]			; verifica se tiro foi disparado
 	MOV  R3, 0
 	CMP  R3, R0
-	JZ   verifica_sair			; não houve colisão com tiro, se tiro não foi disparado
+	MOV  R6, 1
+	JZ   nao_ha_colisao_tiro			; não houve colisão com tiro, se tiro não foi disparado
 	MOV  R0, [POS_TIRO_LINHA]	; linha do tiro
 	MOV  R3, R1					; linha superior do meteoro
 	MOV  R5, [R4]			    ; valor da largura do meteoro (no tamanho em que este se torna atingível por tiro)
 	ADD  R3, R5					; linha inferior do meteoro
 	CMP  R0, R3					; verificar se píxel superior do tiro está ao nível da linha inferior do meteoro (ou acima desta)
-	JGE  verifica_sair			; se não, não houve colisão com tiro
+	JGE  nao_ha_colisao_tiro			; se não, não houve colisão com tiro
 	
 	MOV  R0, [POS_TIRO_COLUNA]	; coluna do tiro
 	SUB  R0, R2					; diferença entre coluna do tiro e coluna mais esquerda do meteoro
-	MOV  R3, 4
+	MOV  R3, 5
 	CMP  R0, R3					; se a diferença for maior que 4, tiro passou à direita do meteoro -> náo há colisão
-	JGE  verifica_sair
+	JGE  nao_ha_colisao_tiro
 	MOV  R3, -1					
 	CMP  R3, R0				    ; se a diferença é menor que 0, tiro passou à esquerda do meteoro -> não há colisão
-	JGE  verifica_sair
+	JGE  nao_ha_colisao_tiro
 								; caso contrário, houve explosão
 	MOV  R0, 1
 	MOV  [REPRODUZ_SOM], R0
 	MOV  [METEORO_ATINGIDO], R0
-	MOV  R9, 0  
-	MOV R0, 10
-	CMP R0, R11
-	JNE verifica_sair			; se for meteoro bom, colisão com tiro não altera vida
+	MOV  R0, 10
+	CMP  R0, R11
+	JNE  ha_colisao_tiro			; se for meteoro bom, colisão com tiro não altera vida
 	MOV  R3, [VIDA]
 	MOV  R0, 5
 	CALL adiciona_vida
 	MOV  [VIDA], R3
 	CALL display
+	JMP  ha_colisao_tiro
 
-verifica_sair:
+nao_ha_colisao_tiro:
+	MOV  R0, 1
+	JMP  verifica_sair_tiro
+
+ha_colisao_tiro:
+	MOV  R0, 0
+
+verifica_sair_tiro:
 	POP  R5
 	POP  R3
-	POP  R0
 	RET 
 
 ; Argumentos:	R2 - coluna em que o objeto está
@@ -1119,37 +1218,6 @@ sair_vida:
 	CALL display
 	RET
 
-; **********************************************************************
-; ESCONDER_ECRAS - esconde todos os ecrãs (de 0 a 5)
-;
-; **********************************************************************
-esconder_ecras:
-	PUSH R0
-	MOV R0, 0				; inicializa o número do ecrã a 0
-esconder_ecras_loop:
-	MOV [ESCONDER_ECRA], R0
-	ADD R0, 1				; incrementa valor do ecrã para percorrer todos os ints de 0 a 5
-	CMP R0, 6				; quando ultrapassa o ecrã 5, sair do loop
-	JNZ esconder_ecras_loop
-esconder_ecras_saida:
-	POP R0
-	RET
-
-; **********************************************************************
-; MOSTRAR_ECRAS - mostra todos os ecrãs (de 0 a 5)
-;
-; **********************************************************************
-mostrar_ecras:
-	PUSH R0
-	MOV R0, 0				; inicializa o número do ecrã a 0
-mostrar_ecras_loop:
-	MOV [MOSTRAR_ECRA], R0
-	ADD R0, 1				; incrementa valor do ecrã para percorrer todos os ints de 0 a 5
-	CMP R0, 6				; quando ultrapassa o ecrã 5, sair do loop
-	JNZ mostrar_ecras_loop
-mostrar_ecras_saida:
-	POP R0
-	RET
 
 ; **********************************************************************
 ; DISPLAY - mostra o valor da grandeza "vida" ao utilizador
@@ -1223,6 +1291,13 @@ escolhe_coluna:
 meteoros_interrupt:
 	PUSH R0
 	PUSH R1
+	PUSH R2
+	PUSH R3
+	PUSH R4
+
+	MOV  R4, MOV_DOWN
+	MOV  R3, N_METEOROS
+	MOV  R2, 0
 
 	MOV  R0, [PAUSA]
 	MOV  R1, 1
@@ -1230,9 +1305,17 @@ meteoros_interrupt:
 	JZ  meteoros_int_saida
 
 	MOV  R0, 1
-	MOV  [MOV_DOWN], R0
+
+meteoros_int_loop:
+	MOV  [R4 + R2], R0
+	ADD  R2, 2
+	SUB  R3, 1
+	JNZ  meteoros_int_loop
 
 meteoros_int_saida:
+	POP  R4
+	POP  R3
+	POP  R2
 	POP  R1
 	POP  R0
 	RFE
