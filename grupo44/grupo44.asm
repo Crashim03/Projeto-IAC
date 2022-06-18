@@ -55,7 +55,7 @@ COLUNA_7				 EQU 48
 COLUNA_8				 EQU 56
 
 ; Linhas em que os meteoros mudam de tamanho
-LINHA_METEORO_1			 EQU 0
+LINHA_METEORO_1			 EQU 1
 LINHA_METEORO_2			 EQU 3
 LINHA_METEORO_3			 EQU 5
 LINHA_METEORO_4			 EQU 9
@@ -532,7 +532,7 @@ restart_boneco:							; se jogo foi restarted
 
 move_esquerda:
 	MOV	 R7, -1							; vai deslocar para a esquerda
-	CALL testa_limitess					; verifica se boneco se encontra no limite do ecrã
+	CALL testa_limites					; verifica se boneco se encontra no limite do ecrã
 	CMP  R7, 0							 
 	JZ   ciclo_boneco					
 
@@ -584,6 +584,7 @@ meteoro_inicio:
 	MOV	 R4, [R3]						; endereço da tabela que define o meteoro
 	MOV	 R8, [R4]						; largura do meteoro
 	MOV  R5, NUMERO_METEORITOS_TAM		; numero de tamanhos que um meteoro pode ter
+	SUB  R5, 1
 	MOV  R0, R7							; número do meteoro
 	MOV  R6, 2							;
 	DIV  R0, R6							; 
